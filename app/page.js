@@ -1,17 +1,13 @@
+
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   ChevronDown,
   Code2,
   Coffee,
-  Headphones,
   Keyboard,
   ListMusic,
   Pause,
@@ -23,223 +19,93 @@ import {
   X,
 } from "lucide-react";
 
-/* =========================================================
-   OFFICE TEXT
-========================================================= */
-
-const officeLines = [
-  "typing...",
-  "npm run dev",
-  'git commit -m "one more fix"',
-  "building...",
-  "coffee.exe started",
-  "localhost:3000",
-  "deploying...",
-  "fixing production",
-  "refactoring...",
-  "code mode: ON",
-];
-
-/* =========================================================
-   FORMAT TIME
-========================================================= */
-
 function formatTime(seconds) {
-  if (!Number.isFinite(seconds)) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
     return "0:00";
   }
 
-  const minutes =
-    Math.floor(seconds / 60);
-
-  const remaining =
-    Math.floor(seconds % 60)
-      .toString()
-      .padStart(2, "0");
-
-  return `${minutes}:${remaining}`;
+  return `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0")}`;
 }
 
-/* =========================================================
-   COMPONENT
-========================================================= */
-
 export default function Home() {
-  /* =======================================================
-     REFS
-  ======================================================= */
+  const audioRef = useRef(null);
+  const keyboardRef = useRef(null);
 
-  const audioRef =
-    useRef(null);
+  const [wallpaper, setWallpaper] = useState("/wallpaper.jpg");
 
-  const keyboardRef =
-    useRef(null);
+  const [playlists, setPlaylists] = useState([]);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(null);
+  const [current, setCurrent] = useState(0);
 
-  /* =======================================================
-     MUSIC
-  ======================================================= */
+  const [loadingMusic, setLoadingMusic] = useState(true);
+  const [musicError, setMusicError] = useState("");
 
-  const [
-    playlists,
-    setPlaylists,
-  ] = useState([]);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  const [
-    musicLoading,
-    setMusicLoading,
-  ] = useState(true);
+  const [volume, setVolume] = useState(0.82);
+  const [muted, setMuted] = useState(false);
 
-  const [
-    musicError,
-    setMusicError,
-  ] = useState("");
+  const [keyboardOn, setKeyboardOn] = useState(false);
+  const [activeKeys, setActiveKeys] = useState([]);
 
-  /* =======================================================
-     WALLPAPER
+  const [showPlaylist, setShowPlaylist] = useState(false);
 
-     Put your wallpaper at:
+  const currentPlaylist =
+    playlists.find((item) => item.id === selectedPlaylistId) ||
+    playlists[0] ||
+    null;
 
-     public/wallpaper.jpg
+  const tracks = currentPlaylist?.tracks || [];
 
-     We don't use an empty src.
-  ======================================================= */
+  const song = tracks[current] || tracks[0] || null;
 
-  const [wallpaper, setWallpaper] =
-    useState("/wallpaper.jpg");
-
-  /* =======================================================
-     PLAYLIST
-  ======================================================= */
-
-  const [
-    selectedPlaylistId,
-    setSelectedPlaylistId,
-  ] = useState("");
-
-  const [
-    current,
-    setCurrent,
-  ] = useState(0);
-
-  const [
-    showPlaylist,
-    setShowPlaylist,
-  ] = useState(false);
-
-  /* =======================================================
-     PLAYER
-  ======================================================= */
-
-  const [
-    playing,
-    setPlaying,
-  ] = useState(false);
-
-  const [
-    progress,
-    setProgress,
-  ] = useState(0);
-
-  const [
-    duration,
-    setDuration,
-  ] = useState(0);
-
-  const [
-    volume,
-    setVolume,
-  ] = useState(0.82);
-
-  const [
-    muted,
-    setMuted,
-  ] = useState(false);
-
-  /* =======================================================
-     KEYBOARD AMBIENCE
-  ======================================================= */
-
-  const [
-    keyboardOn,
-    setKeyboardOn,
-  ] = useState(false);
-
-  const [
-    activeKeys,
-    setActiveKeys,
-  ] = useState([]);
-
-  const [
-    officeText,
-    setOfficeText,
-  ] = useState("ready.");
-
-  /* =======================================================
-     LOAD MUSIC FROM API
-  ======================================================= */
-
+  /*
+   * Load playlists from /api/music
+   */
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
     async function loadMusic() {
       try {
-        setMusicLoading(true);
+        setLoadingMusic(true);
         setMusicError("");
 
-        const response =
-          await fetch(
-            "/api/music",
-            {
-              cache: "no-store",
-            }
-          );
+        const response = await fetch("/api/music", {
+          cache: "no-store",
+        });
 
         if (!response.ok) {
-          throw new Error(
-            `Music API returned ${response.status}`
-          );
+          throw new Error("Unable to load music");
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
-        if (cancelled) {
-          return;
-        }
+        if (!mounted) return;
 
-        const loadedPlaylists =
-          Array.isArray(
-            data.playlists
-          )
-            ? data.playlists
-            : [];
+        const loadedPlaylists = Array.isArray(data)
+          ? data
+          : data.playlists || [];
 
-        setPlaylists(
-          loadedPlaylists
-        );
+        setPlaylists(loadedPlaylists);
 
-        if (
-          loadedPlaylists.length >
-            0
-        ) {
-          setSelectedPlaylistId(
-            loadedPlaylists[0].id
-          );
+        if (loadedPlaylists.length > 0) {
+          setSelectedPlaylistId(loadedPlaylists[0].id);
         }
       } catch (error) {
-        console.error(
-          "Could not load playlists:",
-          error
-        );
+        console.error(error);
 
-        if (!cancelled) {
+        if (mounted) {
           setMusicError(
-            "Unable to load music from public/music."
+            "Unable to load playlists from public/music."
           );
         }
       } finally {
-        if (!cancelled) {
-          setMusicLoading(false);
+        if (mounted) {
+          setLoadingMusic(false);
         }
       }
     }
@@ -247,81 +113,30 @@ export default function Home() {
     loadMusic();
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, []);
 
-  /* =======================================================
-     CURRENT PLAYLIST
-  ======================================================= */
-
-  const currentPlaylist =
-    playlists.find(
-      (playlist) =>
-        playlist.id ===
-        selectedPlaylistId
-    ) ||
-    playlists[0] ||
-    null;
-
-  /* =======================================================
-     CURRENT SONG
-  ======================================================= */
-
-  const song =
-    currentPlaylist?.tracks?.[
-      current
-    ] || null;
-
-  /* =======================================================
-     RESET CURRENT INDEX WHEN
-     PLAYLIST CHANGES
-  ======================================================= */
-
+  /*
+   * Music volume
+   */
   useEffect(() => {
-    setCurrent(0);
-    setProgress(0);
-    setDuration(0);
-    setPlaying(false);
+    if (!audioRef.current) return;
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-  }, [selectedPlaylistId]);
-
-  /* =======================================================
-     MUSIC VOLUME
-  ======================================================= */
-
-  useEffect(() => {
-    if (!audioRef.current) {
-      return;
-    }
-
-    audioRef.current.volume =
-      volume;
-
-    audioRef.current.muted =
-      muted;
+    audioRef.current.volume = volume;
+    audioRef.current.muted = muted;
   }, [volume, muted]);
 
-  /* =======================================================
-     KEYBOARD AUDIO
-
-     EXACTLY 18%
-  ======================================================= */
-
+  /*
+   * Keyboard ambience
+   *
+   * EXACTLY 50%
+   */
   useEffect(() => {
-    if (!keyboardRef.current) {
-      return;
-    }
+    if (!keyboardRef.current) return;
 
-    keyboardRef.current.volume =
-      0.18;
-
-    keyboardRef.current.loop =
-      true;
+    keyboardRef.current.volume = 0.5;
+    keyboardRef.current.loop = true;
 
     if (keyboardOn) {
       keyboardRef.current
@@ -334,23 +149,18 @@ export default function Home() {
         });
     } else {
       keyboardRef.current.pause();
-
-      keyboardRef.current.currentTime =
-        0;
+      keyboardRef.current.currentTime = 0;
     }
   }, [keyboardOn]);
 
-  /* =======================================================
-     KEYBOARD VISUAL ANIMATION
-  ======================================================= */
-
+  /*
+   * Fake keyboard animation
+   */
   useEffect(() => {
     if (!keyboardOn) {
       setActiveKeys([]);
       return;
     }
-
-    let timer;
 
     const chars = [
       "A",
@@ -360,206 +170,111 @@ export default function Home() {
       "J",
       "K",
       "L",
-      ";",
       "⌘",
       "SHIFT",
       "SPACE",
       "ENTER",
     ];
 
-    const cycle = () => {
-      const selected =
-        chars[
-          Math.floor(
-            Math.random() *
-              chars.length
-          )
-        ];
+    let timer;
 
-      setActiveKeys([
-        selected,
-      ]);
+    function animate() {
+      const key =
+        chars[Math.floor(Math.random() * chars.length)];
 
-      setOfficeText(
-        officeLines[
-          Math.floor(
-            Math.random() *
-              officeLines.length
-          )
-        ]
-      );
+      setActiveKeys([key]);
 
-      timer = setTimeout(
-        () => {
-          setActiveKeys([]);
+      timer = setTimeout(() => {
+        setActiveKeys([]);
 
-          timer = setTimeout(
-            cycle,
-            120 +
-              Math.random() *
-                800
-          );
-        },
-        55 +
-          Math.random() * 130
-      );
-    };
+        timer = setTimeout(
+          animate,
+          120 + Math.random() * 650
+        );
+      }, 70 + Math.random() * 140);
+    }
 
-    cycle();
+    animate();
 
     return () => {
       clearTimeout(timer);
     };
   }, [keyboardOn]);
 
-  /* =======================================================
-     PLAY SPECIFIC TRACK
-  ======================================================= */
+  /*
+   * Change playlist
+   */
+  function changePlaylist(playlistId) {
+    const playlist = playlists.find(
+      (item) => item.id === playlistId
+    );
 
-  const playTrack = (
-    playlistId,
-    trackIndex
-  ) => {
-    const targetPlaylist =
-      playlists.find(
-        (playlist) =>
-          playlist.id ===
-          playlistId
-      );
-
-    if (
-      !targetPlaylist ||
-      !targetPlaylist.tracks[
-        trackIndex
-      ]
-    ) {
-      return;
-    }
-
-    /*
-      Close popup immediately.
-    */
-
-    setShowPlaylist(false);
-
-    /*
-      If same song is selected,
-      simply play it.
-    */
-
-    if (
-      selectedPlaylistId ===
-        playlistId &&
-      current === trackIndex &&
-      audioRef.current
-    ) {
-      audioRef.current
-        .play()
-        .then(() => {
-          setPlaying(true);
-        })
-        .catch((error) => {
-          console.error(
-            "Playback failed:",
-            error
-          );
-        });
-
-      return;
-    }
-
-    /*
-      Stop current audio.
-    */
+    if (!playlist) return;
 
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime =
-        0;
+      audioRef.current.currentTime = 0;
     }
 
-    setSelectedPlaylistId(
-      playlistId
-    );
-
-    setCurrent(
-      trackIndex
-    );
-
-    setProgress(0);
-    setDuration(0);
-
-    /*
-      Wait for React to update
-      the audio src.
-    */
-
-    setTimeout(() => {
-      if (!audioRef.current) {
-        return;
-      }
-
-      audioRef.current
-        .play()
-        .then(() => {
-          setPlaying(true);
-        })
-        .catch((error) => {
-          console.error(
-            "Playback failed:",
-            error
-          );
-
-          setPlaying(false);
-        });
-    }, 150);
-  };
-
-  /* =======================================================
-     PLAYLIST CHANGE
-  ======================================================= */
-
-  const changePlaylist = (
-    playlistId
-  ) => {
-    const playlist =
-      playlists.find(
-        (item) =>
-          item.id ===
-          playlistId
-      );
-
-    if (!playlist) {
-      return;
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime =
-        0;
-    }
-
-    setSelectedPlaylistId(
-      playlistId
-    );
-
+    setSelectedPlaylistId(playlistId);
     setCurrent(0);
     setProgress(0);
     setDuration(0);
     setPlaying(false);
-  };
+  }
 
-  /* =======================================================
-     PLAY / PAUSE
-  ======================================================= */
-
-  const togglePlay = () => {
+  /*
+   * Change song
+   */
+  function changeSong(index, autoPlay = true) {
     if (
-      !audioRef.current ||
-      !song
+      !currentPlaylist ||
+      index < 0 ||
+      index >= currentPlaylist.tracks.length
     ) {
       return;
     }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    setCurrent(index);
+    setProgress(0);
+    setDuration(0);
+
+    if (!autoPlay) {
+      setPlaying(false);
+      return;
+    }
+
+    /*
+     * Wait until React has rendered the new src.
+     */
+    setTimeout(() => {
+      if (!audioRef.current) return;
+
+      audioRef.current
+        .play()
+        .then(() => {
+          setPlaying(true);
+        })
+        .catch((error) => {
+          console.error(
+            "Audio playback failed:",
+            error
+          );
+          setPlaying(false);
+        });
+    }, 100);
+  }
+
+  /*
+   * Play / pause
+   */
+  function togglePlay() {
+    if (!audioRef.current || !song) return;
 
     if (playing) {
       audioRef.current.pause();
@@ -577,51 +292,31 @@ export default function Home() {
           "Unable to play song:",
           error
         );
-
         setPlaying(false);
       });
-  };
+  }
 
-  /* =======================================================
-     NEXT
-  ======================================================= */
-
-  const next = () => {
-    if (
-      !currentPlaylist ||
-      currentPlaylist.tracks.length ===
-        0
-    ) {
-      return;
-    }
+  /*
+   * Next
+   */
+  function next() {
+    if (!tracks.length) return;
 
     const nextIndex =
-      (current + 1) %
-      currentPlaylist.tracks.length;
+      (current + 1) % tracks.length;
 
-    playTrack(
-      currentPlaylist.id,
-      nextIndex
-    );
-  };
+    changeSong(nextIndex, true);
+  }
 
-  /* =======================================================
-     PREVIOUS
-  ======================================================= */
-
-  const previous = () => {
-    if (
-      !currentPlaylist ||
-      currentPlaylist.tracks.length ===
-        0
-    ) {
-      return;
-    }
+  /*
+   * Previous
+   */
+  function previous() {
+    if (!tracks.length) return;
 
     if (
       audioRef.current &&
-      audioRef.current.currentTime >
-        3
+      audioRef.current.currentTime > 3
     ) {
       audioRef.current.currentTime = 0;
       setProgress(0);
@@ -629,94 +324,24 @@ export default function Home() {
     }
 
     const previousIndex =
-      (current -
-        1 +
-        currentPlaylist.tracks.length) %
-      currentPlaylist.tracks.length;
+      (current - 1 + tracks.length) %
+      tracks.length;
 
-    playTrack(
-      currentPlaylist.id,
-      previousIndex
-    );
-  };
+    changeSong(previousIndex, true);
+  }
 
-  /* =======================================================
-     SEEK
+  /*
+   * Wallpaper
+   */
+  function handleWallpaperChange(event) {
+    const file = event.target.files?.[0];
 
-     This is intentionally handled directly
-     against the audio element.
-  ======================================================= */
+    if (!file) return;
 
-  const handleSeek = (
-    event
-  ) => {
-    const value =
-      Number(
-        event.target.value
-      );
-
-    if (
-      audioRef.current &&
-      Number.isFinite(value)
-    ) {
-      audioRef.current.currentTime =
-        value;
-    }
-
-    setProgress(value);
-  };
-
-  /* =======================================================
-     WALLPAPER
-  ======================================================= */
-
-  const handleWallpaperChange = (
-    event
-  ) => {
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const imageUrl =
-      URL.createObjectURL(file);
+    const imageUrl = URL.createObjectURL(file);
 
     setWallpaper(imageUrl);
-  };
-
-  /* =======================================================
-     ESCAPE KEY CLOSES PLAYLIST
-  ======================================================= */
-
-  useEffect(() => {
-    const handleKeyDown = (
-      event
-    ) => {
-      if (
-        event.key === "Escape"
-      ) {
-        setShowPlaylist(false);
-      }
-    };
-
-    window.addEventListener(
-      "keydown",
-      handleKeyDown
-    );
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown
-      );
-    };
-  }, []);
-
-  /* =======================================================
-     RENDER
-  ======================================================= */
+  }
 
   return (
     <main
@@ -725,55 +350,74 @@ export default function Home() {
         "--wallpaper": `url("${wallpaper}")`,
       }}
     >
-      {/* =================================================
-          BACKGROUND
-      ================================================= */}
+      {/* =====================================================
+          SHARP BACKGROUND
+      ===================================================== */}
 
       <div className="bg-image" />
       <div className="bg-vignette" />
       <div className="grain" />
 
-      {/* =================================================
-          WALLPAPER INPUT
-      ================================================= */}
+      {/* =====================================================
+          HIDDEN WALLPAPER INPUT
+
+          IMPORTANT:
+          This is deliberately hidden.
+          Users click the custom button instead.
+      ===================================================== */}
 
       <input
         id="wallpaper-input"
+        className="wallpaper-file-input"
         type="file"
-        accept="image/*"
-        className="hidden-input"
-        onChange={
-          handleWallpaperChange
-        }
+        accept="image/jpeg,image/png,image/webp,image/jpg"
+        onChange={handleWallpaperChange}
       />
 
-      {/* =================================================
+      {/* =====================================================
           TOP BAR
-      ================================================= */}
+      ===================================================== */}
 
       <header className="topbar">
         <div className="brand">
           <Code2 size={15} />
-
-          <span>
-            DEV MODE
-          </span>
+          <span>DEV MODE</span>
         </div>
 
         <div className="status">
           <span />
-
           {keyboardOn
-            ? officeText
+            ? "office ambience · 50%"
             : "focus mode"}
         </div>
 
-        <div className="top-actions" />
+        {/* =================================================
+            OFFICE SOUNDS — TOP RIGHT
+        ================================================= */}
+
+        <button
+          type="button"
+          className={`office-toggle ${
+            keyboardOn ? "on" : ""
+          }`}
+          onClick={() =>
+            setKeyboardOn((value) => !value)
+          }
+          aria-pressed={keyboardOn}
+        >
+          <Keyboard size={15} />
+
+          <span>Office sounds</span>
+
+          <span className="office-state">
+            {keyboardOn ? "ON" : "OFF"}
+          </span>
+        </button>
       </header>
 
-      {/* =================================================
+      {/* =====================================================
           MAIN
-      ================================================= */}
+      ===================================================== */}
 
       <section className="hero">
         <div className="eyebrow">
@@ -783,54 +427,22 @@ export default function Home() {
         <h1>
           Code hard.
           <br />
-
-          <em>
-            Listen harder.
-          </em>
+          <em>Listen harder.</em>
         </h1>
 
         <p className="intro">
-          A soundtrack for debugging
-          at 2 AM, shipping at 5 PM,
-          staring at a terminal and
-          convincing yourself the bug
-          is not in production.
+          A soundtrack for debugging at 2 AM,
+          shipping at 5 PM, staring at a terminal
+          and convincing yourself the bug is not
+          in production.
         </p>
 
-        {/* =================================================
-            ERROR / LOADING
-        ================================================= */}
-
-        {musicLoading && (
-          <div className="music-status">
-            Scanning public/music...
-          </div>
-        )}
-
-        {!musicLoading &&
-          musicError && (
-            <div className="music-status error">
-              {musicError}
-            </div>
-          )}
-
-        {!musicLoading &&
-          !musicError &&
-          playlists.length ===
-            0 && (
-            <div className="music-status">
-              No audio files found.
-              <br />
-              Add playlist folders
-              inside public/music.
-            </div>
-          )}
-
-        {/* =================================================
+        {/* ===================================================
             WORKSPACE
-        ================================================= */}
+        =================================================== */}
 
         <div className="workspace">
+
           {/* =================================================
               TERMINAL
           ================================================= */}
@@ -843,19 +455,14 @@ export default function Home() {
                 <i />
               </span>
 
-              <span>
-                ~/workspace
-              </span>
+              <span>~/workspace</span>
 
-              <span className="mac">
-                ●
-              </span>
+              <span className="mac">●</span>
             </div>
 
             <div className="terminal-body">
               <div>
-                <b>$</b>{" "}
-                whoami
+                <b>$</b> whoami
               </div>
 
               <div className="output">
@@ -863,37 +470,30 @@ export default function Home() {
               </div>
 
               <div>
-                <b>$</b>{" "}
-                status
+                <b>$</b> status
               </div>
 
               <div className="output">
-                building something
-                good...
+                building something good...
               </div>
 
               <div>
-                <b>$</b>{" "}
-                ./playlist --start
+                <b>$</b> ./playlist --start
               </div>
 
               <div className="cursor-line">
-                <span className="prompt">
-                  ›
-                </span>
-
-                <span className="blink">
-                  █
-                </span>
+                <span className="prompt">›</span>
+                <span className="blink">█</span>
               </div>
             </div>
           </div>
 
           {/* =================================================
-              PLAYER CARD
+              PLAYER
           ================================================= */}
 
           <div className="player-card">
+
             {/* =================================================
                 COVER
             ================================================= */}
@@ -912,10 +512,7 @@ export default function Home() {
               <div className="cover-title">
                 DEEP
                 <br />
-
-                <span>
-                  WORK
-                </span>
+                <span>WORK</span>
               </div>
 
               <div className="cover-small">
@@ -923,36 +520,25 @@ export default function Home() {
               </div>
             </div>
 
-            {/* =================================================
-                PLAYER
-            ================================================= */}
-
             <div className="player">
+
               {/* =================================================
                   NOW PLAYING
               ================================================= */}
 
               <div className="now">
-                <div className="now-text">
+                <div>
                   <div className="tiny">
                     NOW PLAYING
                   </div>
 
                   <h2>
-                    {song?.title ||
-                      "Select a song"}
+                    {song?.title || "No song selected"}
                   </h2>
 
                   <p>
-                    {song?.artist ||
-                      "DEV MODE"}
+                    {song?.artist || "DEV MODE"}
                   </p>
-
-                  {song?.album && (
-                    <span className="album">
-                      {song.album}
-                    </span>
-                  )}
                 </div>
 
                 <Coffee
@@ -962,10 +548,9 @@ export default function Home() {
               </div>
 
               {/* =================================================
-                  MAIN AUDIO
+                  MUSIC AUDIO
 
-                  IMPORTANT:
-                  src is NEVER an empty string.
+                  Never render an empty src.
               ================================================= */}
 
               {song?.file && (
@@ -973,46 +558,14 @@ export default function Home() {
                   ref={audioRef}
                   src={song.file}
                   preload="metadata"
-                  onLoadedMetadata={(
-                    event
-                  ) => {
-                    const newDuration =
-                      event.currentTarget
-                        .duration;
-
-                    if (
-                      Number.isFinite(
-                        newDuration
-                      )
-                    ) {
-                      setDuration(
-                        newDuration
-                      );
-                    }
+                  onLoadedMetadata={(event) => {
+                    setDuration(
+                      event.currentTarget.duration
+                    );
                   }}
-                  onDurationChange={(
-                    event
-                  ) => {
-                    const newDuration =
-                      event.currentTarget
-                        .duration;
-
-                    if (
-                      Number.isFinite(
-                        newDuration
-                      )
-                    ) {
-                      setDuration(
-                        newDuration
-                      );
-                    }
-                  }}
-                  onTimeUpdate={(
-                    event
-                  ) => {
+                  onTimeUpdate={(event) => {
                     setProgress(
-                      event.currentTarget
-                        .currentTime
+                      event.currentTarget.currentTime
                     );
                   }}
                   onPlay={() => {
@@ -1021,9 +574,7 @@ export default function Home() {
                   onPause={() => {
                     setPlaying(false);
                   }}
-                  onEnded={() => {
-                    next();
-                  }}
+                  onEnded={next}
                   onError={(event) => {
                     console.error(
                       "Could not load audio:",
@@ -1045,7 +596,7 @@ export default function Home() {
               />
 
               {/* =================================================
-                  PROGRESS
+                  SEEK BAR
               ================================================= */}
 
               <input
@@ -1053,51 +604,39 @@ export default function Home() {
                 type="range"
                 min="0"
                 max={duration || 0}
-                step="0.01"
+                step="0.1"
                 value={Math.min(
                   progress,
                   duration || 0
                 )}
-                disabled={
-                  !song ||
-                  !duration
-                }
-                onChange={
-                  handleSeek
-                }
+                onChange={(event) => {
+                  const value = Number(
+                    event.target.value
+                  );
+
+                  if (audioRef.current) {
+                    audioRef.current.currentTime =
+                      value;
+                  }
+
+                  setProgress(value);
+                }}
                 style={{
                   "--value": `${
                     duration
-                      ? Math.min(
-                          100,
-                          Math.max(
-                            0,
-                            (progress /
-                              duration) *
-                              100
-                          )
-                        )
+                      ? (progress / duration) * 100
                       : 0
                   }%`,
                 }}
-                aria-label="Song progress"
               />
-
-              {/* =================================================
-                  TIME
-              ================================================= */}
 
               <div className="times">
                 <span>
-                  {formatTime(
-                    progress
-                  )}
+                  {formatTime(progress)}
                 </span>
 
                 <span>
-                  {formatTime(
-                    duration
-                  )}
+                  {formatTime(duration)}
                 </span>
               </div>
 
@@ -1108,10 +647,7 @@ export default function Home() {
               <div className="controls">
                 <button
                   type="button"
-                  onClick={
-                    previous
-                  }
-                  disabled={!song}
+                  onClick={previous}
                   aria-label="Previous track"
                 >
                   <SkipBack />
@@ -1120,31 +656,22 @@ export default function Home() {
                 <button
                   type="button"
                   className="play"
-                  onClick={
-                    togglePlay
+                  onClick={togglePlay}
+                  aria-label={
+                    playing ? "Pause" : "Play"
                   }
                   disabled={!song}
-                  aria-label={
-                    playing
-                      ? "Pause"
-                      : "Play"
-                  }
                 >
                   {playing ? (
-                    <Pause
-                      fill="currentColor"
-                    />
+                    <Pause fill="currentColor" />
                   ) : (
-                    <Play
-                      fill="currentColor"
-                    />
+                    <Play fill="currentColor" />
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={next}
-                  disabled={!song}
                   aria-label="Next track"
                 >
                   <SkipForward />
@@ -1156,48 +683,13 @@ export default function Home() {
               ================================================= */}
 
               <div className="bottom-controls">
-                {/* OFFICE SOUNDS */}
 
-                <button
-                  type="button"
-                  className={`office-button ${
-                    keyboardOn
-                      ? "on"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    setKeyboardOn(
-                      (value) =>
-                        !value
-                    );
-                  }}
-                >
-                  <Keyboard
-                    size={16}
-                  />
-
-                  <span>
-                    Office sounds
-                  </span>
-
-                  <span className="switch">
-                    {keyboardOn
-                      ? "ON"
-                      : "OFF"}
-                  </span>
-                </button>
-
-                {/* MUSIC VOLUME */}
-
-                <div className="volume">
+                <div className="player-volume">
                   <button
                     type="button"
-                    onClick={() => {
-                      setMuted(
-                        (value) =>
-                          !value
-                      );
-                    }}
+                    onClick={() =>
+                      setMuted((value) => !value)
+                    }
                     aria-label={
                       muted
                         ? "Unmute"
@@ -1205,13 +697,9 @@ export default function Home() {
                     }
                   >
                     {muted ? (
-                      <VolumeX
-                        size={17}
-                      />
+                      <VolumeX size={17} />
                     ) : (
-                      <Volume2
-                        size={17}
-                      />
+                      <Volume2 size={17} />
                     )}
                   </button>
 
@@ -1221,24 +709,14 @@ export default function Home() {
                     max="1"
                     step="0.01"
                     value={
-                      muted
-                        ? 0
-                        : volume
+                      muted ? 0 : volume
                     }
-                    onChange={(
-                      event
-                    ) => {
+                    onChange={(event) => {
                       setVolume(
-                        Number(
-                          event
-                            .target
-                            .value
-                        )
+                        Number(event.target.value)
                       );
 
-                      setMuted(
-                        false
-                      );
+                      setMuted(false);
                     }}
                     aria-label="Music volume"
                   />
@@ -1246,122 +724,36 @@ export default function Home() {
               </div>
 
               {/* =================================================
-                  OFFICE CONSOLE
-              ================================================= */}
-
-              {keyboardOn && (
-                <div className="office-console">
-                  <div className="console-top">
-                    <Headphones
-                      size={13}
-                    />
-
-                    <span>
-                      AMBIENCE
-                    </span>
-
-                    <span>
-                      LIVE · 18%
-                    </span>
-                  </div>
-
-                  <div className="fake-keyboard">
-                    {[
-                      "ESC",
-                      "Q",
-                      "W",
-                      "E",
-                      "R",
-                      "T",
-                      "Y",
-                      "U",
-                      "I",
-                      "O",
-                      "P",
-                      "A",
-                      "S",
-                      "D",
-                      "F",
-                      "G",
-                      "H",
-                      "J",
-                      "K",
-                      "L",
-                      "⌘",
-                      "SHIFT",
-                      "SPACE",
-                      "ENTER",
-                    ].map(
-                      (key) => (
-                        <span
-                          key={key}
-                          className={
-                            activeKeys.includes(
-                              key
-                            )
-                              ? "key active"
-                              : "key"
-                          }
-                        >
-                          {key}
-                        </span>
-                      )
-                    )}
-                  </div>
-
-                  <div className="typing-line">
-                    <span>
-                      ~/workspace
-                    </span>
-
-                    <b>
-                      {officeText}
-                    </b>
-                  </div>
-
-                  <p>
-                    keyboard.mp3 ·
-                    ambience volume
-                    18%
-                  </p>
-                </div>
-              )}
-
-              {/* =================================================
-                  PLAYLIST SELECTOR
+                  PLAYLIST BUTTON
               ================================================= */}
 
               <div className="playlist-switcher">
                 <button
                   type="button"
                   className="playlist-button"
-                  disabled={
-                    playlists.length ===
-                    0
-                  }
                   onClick={() =>
-                    setShowPlaylist(
-                      true
-                    )
+                    setShowPlaylist(true)
+                  }
+                  disabled={
+                    loadingMusic ||
+                    playlists.length === 0
                   }
                 >
-                  <ListMusic
-                    size={16}
-                  />
+                  <ListMusic size={16} />
 
                   <span>
-                    {currentPlaylist?.name ||
-                      "No playlist"}
+                    {loadingMusic
+                      ? "Loading playlists..."
+                      : currentPlaylist?.name ||
+                        "No playlists"}
                   </span>
 
-                  <ChevronDown
-                    size={15}
-                  />
+                  <ChevronDown size={15} />
                 </button>
               </div>
 
               {/* =================================================
-                  WALLPAPER
+                  WALLPAPER BUTTON
               ================================================= */}
 
               <button
@@ -1375,10 +767,14 @@ export default function Home() {
                     ?.click();
                 }}
               >
-                <span>
-                  Add Your Wallpaper
-                </span>
+                Add Your Wallpaper
               </button>
+
+              {musicError && (
+                <div className="music-error">
+                  {musicError}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1386,195 +782,151 @@ export default function Home() {
 
       {/* =====================================================
           PLAYLIST MODAL
+
+          Clicking playlist now opens a real popup.
       ===================================================== */}
 
       {showPlaylist && (
         <div
           className="playlist-overlay"
-          onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setShowPlaylist(false);
-            }
-          }}
+          onClick={() =>
+            setShowPlaylist(false)
+          }
         >
-          <div className="playlist-modal">
-            {/* MODAL HEADER */}
-
+          <div
+            className="playlist-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
             <div className="playlist-modal-header">
               <div>
-                <div className="modal-eyebrow">
-                  YOUR PLAYLISTS
+                <div className="modal-kicker">
+                  PLAYLIST
                 </div>
 
                 <h3>
-                  Choose your session
+                  {currentPlaylist?.name ||
+                    "Playlist"}
                 </h3>
+
+                <p>
+                  {tracks.length}{" "}
+                  {tracks.length === 1
+                    ? "track"
+                    : "tracks"}
+                </p>
               </div>
 
               <button
                 type="button"
                 className="modal-close"
                 onClick={() =>
-                  setShowPlaylist(
-                    false
-                  )
+                  setShowPlaylist(false)
                 }
                 aria-label="Close playlist"
               >
-                <X size={19} />
+                <X size={18} />
               </button>
             </div>
 
             {/* =================================================
-                PLAYLIST TABS
+                PLAYLIST SELECTOR
             ================================================= */}
 
-            <div className="playlist-tabs">
-              {playlists.map(
-                (playlist) => (
-                  <button
-                    key={
+            <div className="modal-playlists">
+              {playlists.map((playlist) => (
+                <button
+                  type="button"
+                  key={playlist.id}
+                  className={
+                    playlist.id ===
+                    selectedPlaylistId
+                      ? "modal-playlist active"
+                      : "modal-playlist"
+                  }
+                  onClick={() =>
+                    changePlaylist(
                       playlist.id
-                    }
-                    type="button"
-                    className={
-                      playlist.id ===
-                      selectedPlaylistId
-                        ? "playlist-tab active"
-                        : "playlist-tab"
-                    }
-                    onClick={() => {
-                      changePlaylist(
-                        playlist.id
-                      );
-                    }}
-                  >
-                    <span>
-                      {
-                        playlist.name
-                      }
-                    </span>
+                    )
+                  }
+                >
+                  <span>
+                    {playlist.name}
+                  </span>
 
-                    <small>
-                      {
-                        playlist
-                          .tracks
-                          .length
-                      }
-                    </small>
-                  </button>
-                )
-              )}
+                  <small>
+                    {playlist.tracks.length}
+                  </small>
+                </button>
+              ))}
             </div>
 
             {/* =================================================
                 SONG LIST
 
-                THIS IS THE SCROLLABLE AREA.
+                This area scrolls independently.
             ================================================= */}
 
-            <div className="modal-section-title">
-              <span>
-                {currentPlaylist?.name ||
-                  "Playlist"}
-              </span>
-
-              <span>
-                {currentPlaylist?.tracks
-                  ?.length || 0}{" "}
-                tracks
-              </span>
-            </div>
-
-            <div className="playlist-track-list">
-              {currentPlaylist?.tracks?.map(
-                (
-                  item,
-                  index
-                ) => (
+            <div className="modal-song-list">
+              {tracks.length === 0 ? (
+                <div className="empty-playlist">
+                  No songs found in this playlist.
+                </div>
+              ) : (
+                tracks.map((item, index) => (
                   <button
                     type="button"
                     key={
-                      item.id ||
-                      item.file
+                      item.file ||
+                      `${item.title}-${index}`
                     }
-                    className={`modal-track ${
-                      index ===
-                      current &&
-                      selectedPlaylistId ===
-                        currentPlaylist.id
-                        ? "active"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      playTrack(
-                        currentPlaylist.id,
-                        index
-                      )
+                    className={
+                      index === current
+                        ? "modal-song active"
+                        : "modal-song"
                     }
+                    onClick={() => {
+                      changeSong(
+                        index,
+                        true
+                      );
+
+                      setShowPlaylist(
+                        false
+                      );
+                    }}
                   >
-                    <span className="modal-track-number">
-                      {String(
-                        index + 1
-                      ).padStart(
+                    <span className="song-number">
+                      {String(index + 1).padStart(
                         2,
                         "0"
                       )}
                     </span>
 
-                    <span className="modal-track-info">
+                    <span className="song-details">
                       <strong>
-                        {item.title}
+                        {item.title ||
+                          "Untitled"}
                       </strong>
 
                       <small>
-                        {item.artist}
-
-                        {item.album
-                          ? ` · ${item.album}`
-                          : ""}
+                        {item.artist ||
+                          "Unknown artist"}
                       </small>
                     </span>
 
-                    {index ===
-                      current &&
-                      playing &&
-                      selectedPlaylistId ===
-                        currentPlaylist.id ? (
-                      <span className="bars">
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                    ) : (
-                      <span className="track-play">
-                        <Play
-                          size={14}
-                          fill="currentColor"
-                        />
-                      </span>
-                    )}
+                    {index === current &&
+                      playing && (
+                        <span className="playing-bars">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      )}
                   </button>
-                )
+                ))
               )}
-            </div>
-
-            {/* =================================================
-                MODAL FOOTER
-            ================================================= */}
-
-            <div className="playlist-modal-footer">
-              <span>
-                Scroll to browse all
-                tracks
-              </span>
-
-              <span>
-                ESC to close
-              </span>
             </div>
           </div>
         </div>
