@@ -1,8 +1,7 @@
 
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ChevronDown,
@@ -19,92 +18,203 @@ import {
   X,
 } from "lucide-react";
 
+/* =========================================================
+   HELPERS
+========================================================= */
+
 function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "0:00";
   }
 
-  return `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60)
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+
+  return `${minutes}:${remaining
     .toString()
     .padStart(2, "0")}`;
 }
 
+/* =========================================================
+   OFFICE SOUND TEXT
+========================================================= */
+
+const officeLines = [
+  "typing...",
+  "npm run dev",
+  'git commit -m "one more fix"',
+  "building...",
+  "coffee.exe started",
+  "localhost:3000",
+  "deploying...",
+  "fixing production",
+  "refactoring...",
+  "code mode: ON",
+];
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
 export default function Home() {
+  /* =======================================================
+     REFS
+  ======================================================= */
+
   const audioRef = useRef(null);
   const keyboardRef = useRef(null);
 
-  const [wallpaper, setWallpaper] = useState("/wallpaper.jpg");
+  /* =======================================================
+     WALLPAPER
+  ======================================================= */
+
+  const [wallpaper, setWallpaper] =
+    useState("/wallpaper.jpg");
+
+  /* =======================================================
+     MUSIC
+  ======================================================= */
 
   const [playlists, setPlaylists] = useState([]);
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState(null);
-  const [current, setCurrent] = useState(0);
 
-  const [loadingMusic, setLoadingMusic] = useState(true);
+  const [loadingMusic, setLoadingMusic] =
+    useState(true);
+
   const [musicError, setMusicError] = useState("");
 
+  /* =======================================================
+     CURRENT PLAYLIST
+  ======================================================= */
+
+  const [selectedPlaylistId, setSelectedPlaylistId] =
+    useState("");
+
+  const [current, setCurrent] = useState(0);
+
+  /* =======================================================
+     PLAYER
+  ======================================================= */
+
   const [playing, setPlaying] = useState(false);
+
   const [progress, setProgress] = useState(0);
+
   const [duration, setDuration] = useState(0);
 
   const [volume, setVolume] = useState(0.82);
+
   const [muted, setMuted] = useState(false);
 
-  const [keyboardOn, setKeyboardOn] = useState(false);
-  const [activeKeys, setActiveKeys] = useState([]);
+  /* =======================================================
+     UI
+  ======================================================= */
 
-  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [showPlaylist, setShowPlaylist] =
+    useState(false);
 
-  const currentPlaylist =
-    playlists.find((item) => item.id === selectedPlaylistId) ||
-    playlists[0] ||
-    null;
+  /* =======================================================
+     OFFICE SOUNDS
+  ======================================================= */
 
-  const tracks = currentPlaylist?.tracks || [];
+  const [keyboardOn, setKeyboardOn] =
+    useState(false);
 
-  const song = tracks[current] || tracks[0] || null;
+  const [activeKeys, setActiveKeys] =
+    useState([]);
 
-  /*
-   * Load playlists from /api/music
-   */
+  const [officeText, setOfficeText] =
+    useState("ready.");
+
+  /* =======================================================
+     CURRENT PLAYLIST
+  ======================================================= */
+
+  const currentPlaylist = useMemo(() => {
+    if (!playlists.length) {
+      return null;
+    }
+
+    return (
+      playlists.find(
+        (playlist) =>
+          playlist.id === selectedPlaylistId
+      ) || playlists[0]
+    );
+  }, [playlists, selectedPlaylistId]);
+
+  /* =======================================================
+     CURRENT SONG
+  ======================================================= */
+
+  const song = useMemo(() => {
+    if (!currentPlaylist?.tracks?.length) {
+      return null;
+    }
+
+    return (
+      currentPlaylist.tracks[current] ||
+      currentPlaylist.tracks[0]
+    );
+  }, [currentPlaylist, current]);
+
+  /* =======================================================
+     LOAD MUSIC
+  ======================================================= */
+
   useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
 
     async function loadMusic() {
       try {
         setLoadingMusic(true);
         setMusicError("");
 
-        const response = await fetch("/api/music", {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/music",
+          {
+            cache: "no-store",
+          }
+        );
 
         if (!response.ok) {
-          throw new Error("Unable to load music");
+          throw new Error(
+            `Music API returned ${response.status}`
+          );
         }
 
         const data = await response.json();
 
-        if (!mounted) return;
+        if (cancelled) {
+          return;
+        }
 
-        const loadedPlaylists = Array.isArray(data)
-          ? data
-          : data.playlists || [];
+        const loadedPlaylists =
+          Array.isArray(data.playlists)
+            ? data.playlists
+            : [];
 
         setPlaylists(loadedPlaylists);
 
         if (loadedPlaylists.length > 0) {
-          setSelectedPlaylistId(loadedPlaylists[0].id);
+          setSelectedPlaylistId(
+            loadedPlaylists[0].id
+          );
+
+          setCurrent(0);
         }
       } catch (error) {
-        console.error(error);
+        console.error(
+          "Unable to load music:",
+          error
+        );
 
-        if (mounted) {
+        if (!cancelled) {
           setMusicError(
-            "Unable to load playlists from public/music."
+            "Unable to load music from public/music."
           );
         }
       } finally {
-        if (mounted) {
+        if (!cancelled) {
           setLoadingMusic(false);
         }
       }
@@ -113,54 +223,74 @@ export default function Home() {
     loadMusic();
 
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   }, []);
 
-  /*
-   * Music volume
-   */
-  useEffect(() => {
-    if (!audioRef.current) return;
+  /* =======================================================
+     APPLY MUSIC VOLUME
+  ======================================================= */
 
-    audioRef.current.volume = volume;
-    audioRef.current.muted = muted;
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.muted = false;
+    audio.volume = muted ? 0 : volume;
   }, [volume, muted]);
 
-  /*
-   * Keyboard ambience
-   *
-   * EXACTLY 50%
-   */
-  useEffect(() => {
-    if (!keyboardRef.current) return;
+  /* =======================================================
+     OFFICE SOUND
+     
+     ALWAYS 50%
+  ======================================================= */
 
-    keyboardRef.current.volume = 0.5;
-    keyboardRef.current.loop = true;
+  useEffect(() => {
+    const keyboard = keyboardRef.current;
+
+    if (!keyboard) {
+      return;
+    }
+
+    keyboard.volume = 0.5;
+    keyboard.loop = true;
 
     if (keyboardOn) {
-      keyboardRef.current
+      keyboard
         .play()
         .catch((error) => {
           console.warn(
-            "Keyboard ambience could not start:",
+            "Office ambience could not start:",
             error
           );
         });
     } else {
-      keyboardRef.current.pause();
-      keyboardRef.current.currentTime = 0;
+      keyboard.pause();
+
+      try {
+        keyboard.currentTime = 0;
+      } catch {
+        // Ignore browser restrictions.
+      }
     }
   }, [keyboardOn]);
 
-  /*
-   * Fake keyboard animation
-   */
+  /* =======================================================
+     OFFICE VISUAL ANIMATION
+  ======================================================= */
+
   useEffect(() => {
     if (!keyboardOn) {
       setActiveKeys([]);
+      setOfficeText("ready.");
+
       return;
     }
+
+    let timeout;
 
     const chars = [
       "A",
@@ -170,50 +300,76 @@ export default function Home() {
       "J",
       "K",
       "L",
+      ";",
       "⌘",
       "SHIFT",
       "SPACE",
       "ENTER",
     ];
 
-    let timer;
+    const cycle = () => {
+      const selected =
+        chars[
+          Math.floor(
+            Math.random() * chars.length
+          )
+        ];
 
-    function animate() {
-      const key =
-        chars[Math.floor(Math.random() * chars.length)];
+      const line =
+        officeLines[
+          Math.floor(
+            Math.random() *
+              officeLines.length
+          )
+        ];
 
-      setActiveKeys([key]);
+      setActiveKeys([selected]);
+      setOfficeText(line);
 
-      timer = setTimeout(() => {
+      timeout = setTimeout(() => {
         setActiveKeys([]);
 
-        timer = setTimeout(
-          animate,
-          120 + Math.random() * 650
+        timeout = setTimeout(
+          cycle,
+          120 + Math.random() * 800
         );
-      }, 70 + Math.random() * 140);
-    }
+      }, 55 + Math.random() * 130);
+    };
 
-    animate();
+    cycle();
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timeout);
     };
   }, [keyboardOn]);
 
-  /*
-   * Change playlist
-   */
-  function changePlaylist(playlistId) {
+  /* =======================================================
+     CHANGE PLAYLIST
+  ======================================================= */
+
+  const changePlaylist = (
+    playlistId,
+    shouldPlay = false
+  ) => {
     const playlist = playlists.find(
-      (item) => item.id === playlistId
+      (item) =>
+        item.id === playlistId
     );
 
-    if (!playlist) return;
+    if (!playlist) {
+      return;
+    }
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.pause();
+
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // Ignore.
+      }
     }
 
     setSelectedPlaylistId(playlistId);
@@ -221,127 +377,231 @@ export default function Home() {
     setProgress(0);
     setDuration(0);
     setPlaying(false);
-  }
 
-  /*
-   * Change song
-   */
-  function changeSong(index, autoPlay = true) {
     if (
-      !currentPlaylist ||
+      shouldPlay &&
+      playlist.tracks?.length
+    ) {
+      setTimeout(() => {
+        const nextAudio =
+          audioRef.current;
+
+        if (!nextAudio) {
+          return;
+        }
+
+        nextAudio
+          .play()
+          .then(() => {
+            setPlaying(true);
+          })
+          .catch((error) => {
+            console.warn(
+              "Playlist playback failed:",
+              error
+            );
+          });
+      }, 100);
+    }
+  };
+
+  /* =======================================================
+     CHANGE SONG
+  ======================================================= */
+
+  const changeSong = (
+    index,
+    autoPlay = true
+  ) => {
+    if (!currentPlaylist?.tracks?.length) {
+      return;
+    }
+
+    if (
       index < 0 ||
-      index >= currentPlaylist.tracks.length
+      index >=
+        currentPlaylist.tracks.length
     ) {
       return;
     }
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.pause();
+
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // Ignore.
+      }
     }
 
     setCurrent(index);
     setProgress(0);
     setDuration(0);
+    setPlaying(false);
 
-    if (!autoPlay) {
-      setPlaying(false);
+    if (autoPlay) {
+      setTimeout(() => {
+        const nextAudio =
+          audioRef.current;
+
+        if (!nextAudio) {
+          return;
+        }
+
+        nextAudio
+          .play()
+          .then(() => {
+            setPlaying(true);
+          })
+          .catch((error) => {
+            console.warn(
+              "Song playback failed:",
+              error
+            );
+
+            setPlaying(false);
+          });
+      }, 100);
+    }
+  };
+
+  /* =======================================================
+     PLAY / PAUSE
+  ======================================================= */
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+
+    if (!audio || !song?.file) {
       return;
     }
 
-    /*
-     * Wait until React has rendered the new src.
-     */
-    setTimeout(() => {
-      if (!audioRef.current) return;
+    try {
+      if (audio.paused) {
+        await audio.play();
 
-      audioRef.current
-        .play()
-        .then(() => {
-          setPlaying(true);
-        })
-        .catch((error) => {
-          console.error(
-            "Audio playback failed:",
-            error
-          );
-          setPlaying(false);
-        });
-    }, 100);
-  }
-
-  /*
-   * Play / pause
-   */
-  function togglePlay() {
-    if (!audioRef.current || !song) return;
-
-    if (playing) {
-      audioRef.current.pause();
-      setPlaying(false);
-      return;
-    }
-
-    audioRef.current
-      .play()
-      .then(() => {
         setPlaying(true);
-      })
-      .catch((error) => {
-        console.error(
-          "Unable to play song:",
-          error
-        );
-        setPlaying(false);
-      });
-  }
+      } else {
+        audio.pause();
 
-  /*
-   * Next
-   */
-  function next() {
-    if (!tracks.length) return;
+        setPlaying(false);
+      }
+    } catch (error) {
+      console.error(
+        "Unable to play song:",
+        error
+      );
+
+      setPlaying(false);
+    }
+  };
+
+  /* =======================================================
+     NEXT
+  ======================================================= */
+
+  const next = () => {
+    if (!currentPlaylist?.tracks?.length) {
+      return;
+    }
 
     const nextIndex =
-      (current + 1) % tracks.length;
+      (current + 1) %
+      currentPlaylist.tracks.length;
 
     changeSong(nextIndex, true);
-  }
+  };
 
-  /*
-   * Previous
-   */
-  function previous() {
-    if (!tracks.length) return;
+  /* =======================================================
+     PREVIOUS
+  ======================================================= */
+
+  const previous = () => {
+    if (!currentPlaylist?.tracks?.length) {
+      return;
+    }
+
+    const audio = audioRef.current;
 
     if (
-      audioRef.current &&
-      audioRef.current.currentTime > 3
+      audio &&
+      audio.currentTime > 3
     ) {
-      audioRef.current.currentTime = 0;
+      audio.currentTime = 0;
       setProgress(0);
+
       return;
     }
 
     const previousIndex =
-      (current - 1 + tracks.length) %
-      tracks.length;
+      (current -
+        1 +
+        currentPlaylist.tracks.length) %
+      currentPlaylist.tracks.length;
 
     changeSong(previousIndex, true);
-  }
+  };
 
-  /*
-   * Wallpaper
-   */
-  function handleWallpaperChange(event) {
-    const file = event.target.files?.[0];
+  /* =======================================================
+     WALLPAPER
+  ======================================================= */
 
-    if (!file) return;
+  const handleWallpaperChange = (
+    event
+  ) => {
+    const file =
+      event.target.files?.[0];
 
-    const imageUrl = URL.createObjectURL(file);
+    if (!file) {
+      return;
+    }
+
+    const imageUrl =
+      URL.createObjectURL(file);
 
     setWallpaper(imageUrl);
+  };
+
+  /* =======================================================
+     WALLPAPER CLEANUP
+  ======================================================= */
+
+  useEffect(() => {
+    return () => {
+      if (
+        wallpaper?.startsWith("blob:")
+      ) {
+        URL.revokeObjectURL(
+          wallpaper
+        );
+      }
+    };
+  }, [wallpaper]);
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
+
+  if (loadingMusic) {
+    return (
+      <main className="page loading-page">
+        <div className="loading-content">
+          <Code2 size={18} />
+
+          <span>
+            loading playlist...
+          </span>
+        </div>
+      </main>
+    );
   }
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <main
@@ -350,74 +610,77 @@ export default function Home() {
         "--wallpaper": `url("${wallpaper}")`,
       }}
     >
-      {/* =====================================================
-          SHARP BACKGROUND
-      ===================================================== */}
+      {/* =================================================
+          BACKGROUND
+      ================================================= */}
 
       <div className="bg-image" />
+
       <div className="bg-vignette" />
+
       <div className="grain" />
 
-      {/* =====================================================
-          HIDDEN WALLPAPER INPUT
-
-          IMPORTANT:
-          This is deliberately hidden.
-          Users click the custom button instead.
-      ===================================================== */}
+      {/* =================================================
+          WALLPAPER FILE INPUT
+      ================================================= */}
 
       <input
         id="wallpaper-input"
-        className="wallpaper-file-input"
+        className="wallpaper-input"
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/jpg"
-        onChange={handleWallpaperChange}
+        accept="image/*"
+        onChange={
+          handleWallpaperChange
+        }
       />
 
-      {/* =====================================================
-          TOP BAR
-      ===================================================== */}
+      {/* =================================================
+          TOPBAR
+      ================================================= */}
 
       <header className="topbar">
         <div className="brand">
           <Code2 size={15} />
+
           <span>DEV MODE</span>
         </div>
 
         <div className="status">
-          <span />
+          <span className="status-dot" />
+
           {keyboardOn
-            ? "office ambience · 50%"
+            ? officeText
             : "focus mode"}
         </div>
 
-        {/* =================================================
-            OFFICE SOUNDS — TOP RIGHT
-        ================================================= */}
-
         <button
           type="button"
-          className={`office-toggle ${
+          className={`office-top-button ${
             keyboardOn ? "on" : ""
           }`}
           onClick={() =>
-            setKeyboardOn((value) => !value)
+            setKeyboardOn(
+              (value) => !value
+            )
           }
+          aria-label="Toggle office sounds"
           aria-pressed={keyboardOn}
         >
           <Keyboard size={15} />
 
           <span>Office sounds</span>
 
-          <span className="office-state">
-            {keyboardOn ? "ON" : "OFF"}
+          <span className="office-status">
+            {keyboardOn
+              ? "ON · 50%"
+              : "OFF"}
           </span>
         </button>
       </header>
 
-      {/* =====================================================
-          MAIN
-      ===================================================== */}
+      {/* =================================================
+          MAIN HERO
+      ================================================= */}
 
       <section className="hero">
         <div className="eyebrow">
@@ -431,18 +694,18 @@ export default function Home() {
         </h1>
 
         <p className="intro">
-          A soundtrack for debugging at 2 AM,
-          shipping at 5 PM, staring at a terminal
-          and convincing yourself the bug is not
-          in production.
+          A soundtrack for debugging at
+          2 AM, shipping at 5 PM, staring
+          at a terminal and convincing
+          yourself the bug is not in
+          production.
         </p>
 
-        {/* ===================================================
+        {/* =================================================
             WORKSPACE
-        =================================================== */}
+        ================================================= */}
 
         <div className="workspace">
-
           {/* =================================================
               TERMINAL
           ================================================= */}
@@ -455,9 +718,13 @@ export default function Home() {
                 <i />
               </span>
 
-              <span>~/workspace</span>
+              <span>
+                ~/workspace
+              </span>
 
-              <span className="mac">●</span>
+              <span className="mac">
+                ●
+              </span>
             </div>
 
             <div className="terminal-body">
@@ -478,22 +745,27 @@ export default function Home() {
               </div>
 
               <div>
-                <b>$</b> ./playlist --start
+                <b>$</b>{" "}
+                ./playlist --start
               </div>
 
               <div className="cursor-line">
-                <span className="prompt">›</span>
-                <span className="blink">█</span>
+                <span className="prompt">
+                  ›
+                </span>
+
+                <span className="blink">
+                  █
+                </span>
               </div>
             </div>
           </div>
 
           {/* =================================================
-              PLAYER
+              PLAYER CARD
           ================================================= */}
 
           <div className="player-card">
-
             {/* =================================================
                 COVER
             ================================================= */}
@@ -520,24 +792,29 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="player">
+            {/* =================================================
+                PLAYER
+            ================================================= */}
 
+            <div className="player">
               {/* =================================================
                   NOW PLAYING
               ================================================= */}
 
               <div className="now">
-                <div>
+                <div className="now-text">
                   <div className="tiny">
                     NOW PLAYING
                   </div>
 
                   <h2>
-                    {song?.title || "No song selected"}
+                    {song?.title ||
+                      "No song selected"}
                   </h2>
 
                   <p>
-                    {song?.artist || "DEV MODE"}
+                    {song?.artist ||
+                      "DEV MODE"}
                   </p>
                 </div>
 
@@ -548,44 +825,75 @@ export default function Home() {
               </div>
 
               {/* =================================================
-                  MUSIC AUDIO
-
-                  Never render an empty src.
+                  MAIN AUDIO
               ================================================= */}
 
-              {song?.file && (
+              {song?.file ? (
                 <audio
                   ref={audioRef}
                   src={song.file}
                   preload="metadata"
-                  onLoadedMetadata={(event) => {
-                    setDuration(
-                      event.currentTarget.duration
-                    );
+                  onLoadedMetadata={(
+                    event
+                  ) => {
+                    const value =
+                      event.currentTarget
+                        .duration;
+
+                    if (
+                      Number.isFinite(
+                        value
+                      )
+                    ) {
+                      setDuration(value);
+                    }
                   }}
-                  onTimeUpdate={(event) => {
+                  onDurationChange={(
+                    event
+                  ) => {
+                    const value =
+                      event.currentTarget
+                        .duration;
+
+                    if (
+                      Number.isFinite(
+                        value
+                      )
+                    ) {
+                      setDuration(value);
+                    }
+                  }}
+                  onTimeUpdate={(
+                    event
+                  ) => {
                     setProgress(
-                      event.currentTarget.currentTime
+                      event.currentTarget
+                        .currentTime
                     );
                   }}
-                  onPlay={() => {
-                    setPlaying(true);
-                  }}
-                  onPause={() => {
-                    setPlaying(false);
-                  }}
+                  onPlay={() =>
+                    setPlaying(true)
+                  }
+                  onPause={() =>
+                    setPlaying(false)
+                  }
                   onEnded={next}
-                  onError={(event) => {
+                  onError={() => {
                     console.error(
                       "Could not load audio:",
-                      event
+                      song.file
+                    );
+
+                    setPlaying(false);
+                    setMusicError(
+                      "This audio file could not be played."
                     );
                   }}
                 />
-              )}
+              ) : null}
 
               {/* =================================================
-                  KEYBOARD AUDIO
+                  OFFICE AUDIO
               ================================================= */}
 
               <audio
@@ -596,7 +904,7 @@ export default function Home() {
               />
 
               {/* =================================================
-                  SEEK BAR
+                  SEEK
               ================================================= */}
 
               <input
@@ -609,12 +917,19 @@ export default function Home() {
                   progress,
                   duration || 0
                 )}
+                disabled={
+                  !song ||
+                  !duration
+                }
                 onChange={(event) => {
-                  const value = Number(
-                    event.target.value
-                  );
+                  const value =
+                    Number(
+                      event.target.value
+                    );
 
-                  if (audioRef.current) {
+                  if (
+                    audioRef.current
+                  ) {
                     audioRef.current.currentTime =
                       value;
                   }
@@ -624,24 +939,38 @@ export default function Home() {
                 style={{
                   "--value": `${
                     duration
-                      ? (progress / duration) * 100
+                      ? Math.min(
+                          100,
+                          (progress /
+                            duration) *
+                            100
+                        )
                       : 0
                   }%`,
                 }}
+                aria-label="Song progress"
               />
+
+              {/* =================================================
+                  TIMES
+              ================================================= */}
 
               <div className="times">
                 <span>
-                  {formatTime(progress)}
+                  {formatTime(
+                    progress
+                  )}
                 </span>
 
                 <span>
-                  {formatTime(duration)}
+                  {formatTime(
+                    duration
+                  )}
                 </span>
               </div>
 
               {/* =================================================
-                  CONTROLS
+                  PLAYER CONTROLS
               ================================================= */}
 
               <div className="controls">
@@ -650,7 +979,7 @@ export default function Home() {
                   onClick={previous}
                   aria-label="Previous track"
                 >
-                  <SkipBack />
+                  <SkipBack size={19} />
                 </button>
 
                 <button
@@ -658,14 +987,21 @@ export default function Home() {
                   className="play"
                   onClick={togglePlay}
                   aria-label={
-                    playing ? "Pause" : "Play"
+                    playing
+                      ? "Pause"
+                      : "Play"
                   }
-                  disabled={!song}
                 >
                   {playing ? (
-                    <Pause fill="currentColor" />
+                    <Pause
+                      size={21}
+                      strokeWidth={2}
+                    />
                   ) : (
-                    <Play fill="currentColor" />
+                    <Play
+                      size={21}
+                      strokeWidth={2}
+                    />
                   )}
                 </button>
 
@@ -674,7 +1010,9 @@ export default function Home() {
                   onClick={next}
                   aria-label="Next track"
                 >
-                  <SkipForward />
+                  <SkipForward
+                    size={19}
+                  />
                 </button>
               </div>
 
@@ -683,12 +1021,42 @@ export default function Home() {
               ================================================= */}
 
               <div className="bottom-controls">
+                <button
+                  type="button"
+                  className="playlist-button"
+                  onClick={() =>
+                    setShowPlaylist(true)
+                  }
+                  disabled={
+                    !playlists.length
+                  }
+                >
+                  <ListMusic
+                    size={16}
+                  />
 
-                <div className="player-volume">
+                  <span>
+                    {currentPlaylist?.name ||
+                      "No playlists"}
+                  </span>
+
+                  <ChevronDown
+                    size={15}
+                  />
+                </button>
+
+                {/* =================================================
+                    VOLUME
+                ================================================= */}
+
+                <div className="volume">
                   <button
                     type="button"
+                    className="volume-button"
                     onClick={() =>
-                      setMuted((value) => !value)
+                      setMuted(
+                        (value) => !value
+                      )
                     }
                     aria-label={
                       muted
@@ -704,19 +1072,40 @@ export default function Home() {
                   </button>
 
                   <input
+                    className="volume-slider"
                     type="range"
                     min="0"
                     max="1"
                     step="0.01"
                     value={
-                      muted ? 0 : volume
+                      muted
+                        ? 0
+                        : volume
                     }
                     onChange={(event) => {
+                      const newVolume =
+                        Number(
+                          event.target
+                            .value
+                        );
+
                       setVolume(
-                        Number(event.target.value)
+                        newVolume
                       );
 
-                      setMuted(false);
+                      setMuted(
+                        newVolume === 0
+                      );
+
+                      if (
+                        audioRef.current
+                      ) {
+                        audioRef.current.volume =
+                          newVolume;
+
+                        audioRef.current.muted =
+                          false;
+                      }
                     }}
                     aria-label="Music volume"
                   />
@@ -724,51 +1113,38 @@ export default function Home() {
               </div>
 
               {/* =================================================
-                  PLAYLIST BUTTON
+                  PLAYLIST SUMMARY
               ================================================= */}
 
-              <div className="playlist-switcher">
-                <button
-                  type="button"
-                  className="playlist-button"
-                  onClick={() =>
-                    setShowPlaylist(true)
-                  }
-                  disabled={
-                    loadingMusic ||
-                    playlists.length === 0
-                  }
-                >
-                  <ListMusic size={16} />
+              <div className="playlist-summary">
+                <span>
+                  {currentPlaylist?.tracks
+                    ?.length || 0}{" "}
+                  tracks
+                </span>
 
-                  <span>
-                    {loadingMusic
-                      ? "Loading playlists..."
-                      : currentPlaylist?.name ||
-                        "No playlists"}
-                  </span>
-
-                  <ChevronDown size={15} />
-                </button>
+                <span>
+                  {currentPlaylist?.name ||
+                    "Playlist"}
+                </span>
               </div>
 
               {/* =================================================
-                  WALLPAPER BUTTON
+                  WALLPAPER
               ================================================= */}
 
-              <button
-                type="button"
+              <label
+                htmlFor="wallpaper-input"
                 className="add-wallpaper"
-                onClick={() => {
-                  document
-                    .getElementById(
-                      "wallpaper-input"
-                    )
-                    ?.click();
-                }}
               >
-                Add Your Wallpaper
-              </button>
+                <span>
+                  Choose Wallpaper
+                </span>
+              </label>
+
+              {/* =================================================
+                  ERROR
+              ================================================= */}
 
               {musicError && (
                 <div className="music-error">
@@ -780,42 +1156,41 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =====================================================
+      {/* =================================================
           PLAYLIST MODAL
-
-          Clicking playlist now opens a real popup.
-      ===================================================== */}
+      ================================================= */}
 
       {showPlaylist && (
         <div
           className="playlist-overlay"
-          onClick={() =>
-            setShowPlaylist(false)
-          }
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setShowPlaylist(false);
+            }
+          }}
         >
           <div
             className="playlist-modal"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
+            role="dialog"
+            aria-modal="true"
+            aria-label="Playlist selector"
           >
+            {/* =================================================
+                MODAL HEADER
+            ================================================= */}
+
             <div className="playlist-modal-header">
               <div>
-                <div className="modal-kicker">
-                  PLAYLIST
+                <div className="tiny">
+                  PLAYLISTS
                 </div>
 
                 <h3>
-                  {currentPlaylist?.name ||
-                    "Playlist"}
+                  Choose your session
                 </h3>
-
-                <p>
-                  {tracks.length}{" "}
-                  {tracks.length === 1
-                    ? "track"
-                    : "tracks"}
-                </p>
               </div>
 
               <button
@@ -831,61 +1206,79 @@ export default function Home() {
             </div>
 
             {/* =================================================
-                PLAYLIST SELECTOR
+                PLAYLIST TABS
             ================================================= */}
 
-            <div className="modal-playlists">
-              {playlists.map((playlist) => (
-                <button
-                  type="button"
-                  key={playlist.id}
-                  className={
-                    playlist.id ===
-                    selectedPlaylistId
-                      ? "modal-playlist active"
-                      : "modal-playlist"
-                  }
-                  onClick={() =>
-                    changePlaylist(
-                      playlist.id
-                    )
-                  }
-                >
-                  <span>
-                    {playlist.name}
-                  </span>
+            <div className="playlist-tabs">
+              {playlists.map(
+                (playlist) => (
+                  <button
+                    type="button"
+                    key={playlist.id}
+                    className={`playlist-tab ${
+                      playlist.id ===
+                      selectedPlaylistId
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      changePlaylist(
+                        playlist.id,
+                        false
+                      );
+                    }}
+                  >
+                    <span>
+                      {playlist.name}
+                    </span>
 
-                  <small>
-                    {playlist.tracks.length}
-                  </small>
-                </button>
-              ))}
+                    <small>
+                      {playlist.tracks
+                        ?.length || 0}
+                    </small>
+                  </button>
+                )
+              )}
             </div>
 
             {/* =================================================
-                SONG LIST
+                SONG HEADER
+            ================================================= */}
 
-                This area scrolls independently.
+            <div className="modal-song-heading">
+              <span>
+                {currentPlaylist?.name ||
+                  "Songs"}
+              </span>
+
+              <small>
+                {currentPlaylist?.tracks
+                  ?.length || 0}{" "}
+                songs
+              </small>
+            </div>
+
+            {/* =================================================
+                SONG SCROLLER
             ================================================= */}
 
             <div className="modal-song-list">
-              {tracks.length === 0 ? (
-                <div className="empty-playlist">
-                  No songs found in this playlist.
-                </div>
-              ) : (
-                tracks.map((item, index) => (
+              {currentPlaylist?.tracks?.map(
+                (
+                  item,
+                  index
+                ) => (
                   <button
                     type="button"
                     key={
                       item.file ||
                       `${item.title}-${index}`
                     }
-                    className={
+                    className={`modal-track ${
                       index === current
-                        ? "modal-song active"
-                        : "modal-song"
-                    }
+                        ? "active"
+                        : ""
+                    }`}
                     onClick={() => {
                       changeSong(
                         index,
@@ -897,44 +1290,65 @@ export default function Home() {
                       );
                     }}
                   >
-                    <span className="song-number">
-                      {String(index + 1).padStart(
+                    <span className="track-number">
+                      {String(
+                        index + 1
+                      ).padStart(
                         2,
                         "0"
                       )}
                     </span>
 
-                    <span className="song-details">
+                    <span className="track-details">
                       <strong>
                         {item.title ||
-                          "Untitled"}
+                          "Unknown title"}
                       </strong>
 
                       <small>
                         {item.artist ||
                           "Unknown artist"}
                       </small>
+
+                      {item.album && (
+                        <em>
+                          {item.album}
+                        </em>
+                      )}
                     </span>
 
-                    {index === current &&
-                      playing && (
-                        <span className="playing-bars">
+                    <span className="track-action">
+                      {index ===
+                        current &&
+                      playing ? (
+                        <span className="bars">
                           <i />
                           <i />
                           <i />
                         </span>
+                      ) : (
+                        <Play size={15} />
                       )}
+                    </span>
                   </button>
-                ))
+                )
+              )}
+
+              {!currentPlaylist?.tracks
+                ?.length && (
+                <div className="empty-playlist">
+                  No songs found in this
+                  playlist.
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* =====================================================
+      {/* =================================================
           FOOTER
-      ===================================================== */}
+      ================================================= */}
 
       <footer>
         <span>
@@ -948,3 +1362,4 @@ export default function Home() {
     </main>
   );
 }
+
