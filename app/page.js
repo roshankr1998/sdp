@@ -171,12 +171,11 @@ export default function Home() {
         setLoadingMusic(true);
         setMusicError("");
 
-        const response = await fetch(
-          "/api/music",
-          {
-            cache: "no-store",
-          }
-        );
+        const response = await fetch("/api/music", {
+          next: {
+            revalidate: 300,
+          },
+        });
 
         if (!response.ok) {
           throw new Error(

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { parseBuffer } from "music-metadata";
+import { unstable_cache } from "next/cache";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// =========================================================
+// CONFIG
+// =========================================================
+
+export const revalidate = 300;
 
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,9 +15,9 @@ const SUPABASE_KEY =
 
 const BUCKET = "music";
 
-/* =========================================================
-   AUDIO EXTENSIONS
-========================================================= */
+// =========================================================
+// AUDIO EXTENSIONS
+// =========================================================
 
 function isAudioFile(name) {
   return /\.(mp3|wav|m4a|aac|ogg|flac|webm)$/i.test(
@@ -22,9 +25,9 @@ function isAudioFile(name) {
   );
 }
 
-/* =========================================================
-   PUBLIC SUPABASE URL
-========================================================= */
+// =========================================================
+// PUBLIC SUPABASE URL
+// =========================================================
 
 function getPublicUrl(filePath) {
   const encodedPath = filePath
@@ -32,12 +35,27 @@ function getPublicUrl(filePath) {
     .map(encodeURIComponent)
     .join("/");
 
-  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${encodedPath}`;
+  return (
+    `${SUPABASE_URL}/storage/v1/object/public/` +
+    `${BUCKET}/${encodedPath}`
+  );
 }
 
-/* =========================================================
-   LIST SUPABASE FOLDER
-========================================================= */
+// =========================================================
+// FALLBACK TITLE
+// =========================================================
+
+function fallbackTitle(filename) {
+  return filename
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// =========================================================
+// LIST SUPABASE FOLDER
+// =========================================================
 
 async function listFolder(prefix = "") {
   const url =
@@ -59,7 +77,9 @@ async function listFolder(prefix = "") {
 
     body: JSON.stringify({
       prefix,
+
       limit: 1000,
+
       offset: 0,
 
       sortBy: {
@@ -68,184 +88,34 @@ async function listFolder(prefix = "") {
       },
     }),
 
+    // unstable_cache handles application-level caching.
     cache: "no-store",
   });
 
-  const text =
-    await response.text();
-
-  console.log(
-    `LIST ${prefix || "/"} → ${response.status}`
-  );
-
   if (!response.ok) {
+    const text =
+      await response.text();
+
     throw new Error(
       `Supabase list failed ${response.status}: ${text}`
     );
   }
 
-  return JSON.parse(text);
+  return response.json();
 }
 
-/* =========================================================
-   READ ID3 METADATA
-========================================================= */
+// =========================================================
+// BUILD TRACK
+//
+// IMPORTANT:
+// We DO NOT download the MP3 here.
+//
+// The old implementation downloaded the entire audio file
+// simply to read ID3 metadata. That is the main reason the
+// playlist took so long to appear.
+// =========================================================
 
-async function readMetadata(filePath) {
-  const url =
-    getPublicUrl(filePath);
-
-  try {
-    console.log(
-      `Reading ID3: ${filePath}`
-    );
-
-    /*
-     * Fetch the MP3 from Supabase.
-     *
-     * This happens ONLY on the server while
-     * building the metadata response.
-     */
-
-    const response =
-      await fetch(url, {
-        cache: "no-store",
-      });
-
-    if (!response.ok) {
-      throw new Error(
-        `Unable to fetch audio: ${response.status}`
-      );
-    }
-
-    const arrayBuffer =
-      await response.arrayBuffer();
-
-    const buffer =
-      Buffer.from(arrayBuffer);
-
-    /*
-     * music-metadata reads the actual embedded
-     * ID3 / metadata tags.
-     */
-
-    const metadata =
-      await parseBuffer(
-        buffer,
-        {
-          mimeType:
-            response.headers.get(
-              "content-type"
-            ) || "audio/mpeg",
-        }
-      );
-
-    const common =
-      metadata.common || {};
-
-    console.log(
-      "ID3:",
-      JSON.stringify(
-        {
-          title: common.title,
-          artist: common.artist,
-          album: common.album,
-          albumartist:
-            common.albumartist,
-          year: common.year,
-          genre: common.genre,
-          track:
-            common.track,
-          disk:
-            common.disk,
-        },
-        null,
-        2
-      )
-    );
-
-    return {
-      title:
-        common.title ||
-        null,
-
-      artist:
-        common.artist ||
-        null,
-
-      album:
-        common.album ||
-        null,
-
-      albumArtist:
-        common.albumartist ||
-        null,
-
-      year:
-        common.year ||
-        null,
-
-      genre:
-        Array.isArray(
-          common.genre
-        )
-          ? common.genre[0]
-          : common.genre ||
-            null,
-
-      track:
-        common.track?.no ||
-        null,
-
-      disk:
-        common.disk?.no ||
-        null,
-
-      composer:
-        Array.isArray(
-          common.composer
-        )
-          ? common.composer[0]
-          : common.composer ||
-            null,
-    };
-  } catch (error) {
-    console.error(
-      `ID3 failed for ${filePath}:`,
-      error
-    );
-
-    return {
-      title: null,
-      artist: null,
-      album: null,
-      albumArtist: null,
-      year: null,
-      genre: null,
-      track: null,
-      disk: null,
-      composer: null,
-    };
-  }
-}
-
-/* =========================================================
-   FALLBACK TITLE
-========================================================= */
-
-function fallbackTitle(filename) {
-  return filename
-    .replace(/\.[^/.]+$/, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/* =========================================================
-   BUILD TRACK
-========================================================= */
-
-async function buildTrack(
+function buildTrack(
   playlistName,
   item
 ) {
@@ -255,53 +125,36 @@ async function buildTrack(
   const url =
     getPublicUrl(filePath);
 
-  const metadata =
-    await readMetadata(filePath);
-
   return {
     id: filePath,
 
     file: url,
 
-    /*
-     * ID3 metadata first.
-     * Filename is ONLY the fallback.
-     */
-
     title:
-      metadata.title ||
       fallbackTitle(item.name),
 
     artist:
-      metadata.artist ||
       "Unknown artist",
 
     album:
-      metadata.album ||
       "",
 
     albumArtist:
-      metadata.albumArtist ||
       "",
 
     year:
-      metadata.year ||
       null,
 
     genre:
-      metadata.genre ||
       "",
 
     track:
-      metadata.track ||
       null,
 
     disk:
-      metadata.disk ||
       null,
 
     composer:
-      metadata.composer ||
       "",
 
     filename:
@@ -309,215 +162,169 @@ async function buildTrack(
   };
 }
 
-/* =========================================================
-   FIND AUDIO FILES
-========================================================= */
+// =========================================================
+// BUILD MUSIC LIBRARY
+//
+// Cached for 5 minutes.
+//
+// This means:
+// First request:
+//   Supabase → build library → cache
+//
+// Next requests:
+//   cache → immediately return library
+//
+// =========================================================
 
-async function getPlaylistTracks(
-  playlistName
-) {
-  const items =
-    await listFolder(
-      playlistName
-    );
-
-  const audioItems =
-    items.filter(
-      (item) =>
-        item?.name &&
-        isAudioFile(
-          item.name
-        )
-    );
-
-  console.log(
-    `Playlist "${playlistName}" → ${audioItems.length} audio files`
-  );
-
-  /*
-   * Parse metadata sequentially.
-   *
-   * This is intentionally conservative so we don't
-   * hammer Supabase with dozens of simultaneous
-   * MP3 downloads.
-   */
-
-  const tracks = [];
-
-  for (const item of audioItems) {
-    const track =
-      await buildTrack(
-        playlistName,
-        item
-      );
-
-    tracks.push(track);
-  }
-
-  return tracks;
-}
-
-/* =========================================================
-   GET
-========================================================= */
-
-export async function GET() {
-  try {
-    console.log("");
-    console.log(
-      "============================================================"
-    );
-    console.log(
-      "MUSIC API — SUPABASE + ID3"
-    );
-    console.log(
-      "============================================================"
-    );
-
-    console.log(
-      "Supabase URL:",
-      SUPABASE_URL
-    );
-
-    console.log(
-      "Supabase key:",
-      SUPABASE_KEY
-        ? "PRESENT"
-        : "MISSING"
-    );
-
-    console.log(
-      "Bucket:",
-      BUCKET
-    );
-
-    /* =======================================================
-       ROOT
-    ======================================================= */
-
-    const root =
-      await listFolder("");
-
-    console.log(
-      "Root objects:",
-      root.length
-    );
-
-    console.log(
-      JSON.stringify(
-        root,
-        null,
-        2
-      )
-    );
-
-    /* =======================================================
-       PLAYLISTS
-    ======================================================= */
-
-    const playlists = [];
-
-    for (const item of root) {
-      if (!item?.name) {
-        continue;
-      }
-
-      /*
-       * Root-level MP3s are not playlists.
-       */
-
-      if (
-        isAudioFile(
-          item.name
-        )
-      ) {
-        continue;
-      }
-
-      const playlistName =
-        item.name;
-
-      console.log("");
-      console.log(
-        "------------------------------------------------------------"
-      );
+const getMusicLibrary =
+  unstable_cache(
+    async () => {
 
       console.log(
-        "PLAYLIST:",
-        playlistName
+        "Building music library..."
       );
 
-      try {
-        const tracks =
-          await getPlaylistTracks(
-            playlistName
+      // -----------------------------------------------------
+      // ROOT
+      // -----------------------------------------------------
+
+      const root =
+        await listFolder("");
+
+      // -----------------------------------------------------
+      // FIND PLAYLISTS
+      // -----------------------------------------------------
+
+      const playlistNames =
+        root
+          .filter(
+            (item) =>
+              item?.name &&
+              !isAudioFile(
+                item.name
+              )
+          )
+          .map(
+            (item) =>
+              item.name
           );
 
-        if (tracks.length > 0) {
-          playlists.push({
-            id: playlistName,
-
-            name: playlistName,
-
-            tracks,
-          });
-        }
-      } catch (error) {
-        console.error(
-          `Playlist failed: ${playlistName}`,
-          error
-        );
-      }
-    }
-
-    /* =======================================================
-       FINAL
-    ======================================================= */
-
-    const totalTracks =
-      playlists.reduce(
-        (total, playlist) =>
-          total +
-          playlist.tracks.length,
-        0
+      console.log(
+        "Playlists found:",
+        playlistNames.length
       );
 
-    console.log("");
-    console.log(
-      "============================================================"
-    );
-    console.log(
-      "FINAL RESULT"
-    );
-    console.log(
-      "============================================================"
-    );
+      // -----------------------------------------------------
+      // LOAD ALL PLAYLISTS IN PARALLEL
+      // -----------------------------------------------------
 
-    console.log(
-      "Playlists:",
-      playlists.length
-    );
+      const results =
+        await Promise.all(
+          playlistNames.map(
+            async (
+              playlistName
+            ) => {
 
-    console.log(
-      "Tracks:",
-      totalTracks
-    );
+              try {
 
-    console.log(
-      JSON.stringify(
-        playlists,
-        null,
-        2
-      )
-    );
+                const items =
+                  await listFolder(
+                    playlistName
+                  );
 
-    console.log(
-      "============================================================"
-    );
+                // ------------------------------------------------
+                // ONLY KEEP AUDIO
+                // ------------------------------------------------
 
-    return NextResponse.json(
-      {
-        success: true,
+                const audioItems =
+                  items.filter(
+                    (item) =>
+                      item?.name &&
+                      isAudioFile(
+                        item.name
+                      )
+                  );
+
+                // ------------------------------------------------
+                // BUILD TRACK OBJECTS
+                //
+                // NO AUDIO DOWNLOADS HERE
+                // ------------------------------------------------
+
+                const tracks =
+                  audioItems.map(
+                    (item) =>
+                      buildTrack(
+                        playlistName,
+                        item
+                      )
+                  );
+
+                if (
+                  tracks.length === 0
+                ) {
+                  return null;
+                }
+
+                return {
+                  id:
+                    playlistName,
+
+                  name:
+                    playlistName,
+
+                  tracks,
+                };
+
+              } catch (error) {
+
+                console.error(
+                  `Playlist failed: ${playlistName}`,
+                  error
+                );
+
+                return null;
+              }
+            }
+          )
+        );
+
+      // -----------------------------------------------------
+      // REMOVE FAILED / EMPTY PLAYLISTS
+      // -----------------------------------------------------
+
+      const playlists =
+        results.filter(
+          Boolean
+        );
+
+      // -----------------------------------------------------
+      // TOTAL TRACK COUNT
+      // -----------------------------------------------------
+
+      const totalTracks =
+        playlists.reduce(
+          (
+            total,
+            playlist
+          ) =>
+            total +
+            playlist.tracks.length,
+
+          0
+        );
+
+      console.log(
+        "Music library ready:",
+        playlists.length,
+        "playlists /",
+        totalTracks,
+        "tracks"
+      );
+
+      return {
+        success:
+          true,
 
         playlists,
 
@@ -525,17 +332,59 @@ export async function GET() {
           playlists.length,
 
         totalTracks,
-      },
+      };
+    },
+
+    // Cache key
+    ["music-library-v1"],
+
+    // Cache configuration
+    {
+      revalidate:
+        300,
+    }
+  );
+
+// =========================================================
+// GET
+// =========================================================
+
+export async function GET() {
+
+  try {
+
+    console.log(
+      "GET /api/music"
+    );
+
+    // -------------------------------------------------------
+    // GET CACHED LIBRARY
+    // -------------------------------------------------------
+
+    const data =
+      await getMusicLibrary();
+
+    // -------------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------------
+
+    return NextResponse.json(
+      data,
       {
-        status: 200,
+        status:
+          200,
 
         headers: {
+
+          // CDN / browser caching
           "Cache-Control":
-            "no-store, no-cache, must-revalidate",
+            "public, s-maxage=300, stale-while-revalidate=600",
         },
       }
     );
+
   } catch (error) {
+
     console.error(
       "MUSIC API ERROR:",
       error
@@ -543,16 +392,20 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        success: false,
+        success:
+          false,
 
         error:
           error?.message ||
           "Unable to load music.",
 
-        playlists: [],
+        playlists:
+          [],
       },
+
       {
-        status: 500,
+        status:
+          500,
       }
     );
   }
