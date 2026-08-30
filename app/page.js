@@ -1,750 +1,1481 @@
-
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  Activity,
-  ChevronDown,
-  Code2,
-  Coffee,
-  Keyboard,
-  ListMusic,
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  X,
+Activity,
+ChevronDown,
+Code2,
+Coffee,
+Keyboard,
+ListMusic,
+Pause,
+Play,
+SkipBack,
+SkipForward,
+Volume2,
+VolumeX,
+X,
 } from "lucide-react";
 
 /* =========================================================
-   HELPERS
+HELPERS
 ========================================================= */
 
 function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return "0:00";
-  }
+if (!Number.isFinite(seconds) || seconds < 0) {
+return "0:00";
+}
 
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.floor(seconds % 60);
+const minutes = Math.floor(seconds / 60);
+const remaining = Math.floor(seconds % 60);
 
-  return `${minutes}:${remaining
+return `${minutes}:${remaining
     .toString()
     .padStart(2, "0")}`;
 }
 
 /* =========================================================
-   OFFICE SOUND TEXT
+OFFICE SOUND TEXT
 ========================================================= */
 
 const officeLines = [
-  "typing...",
-  "npm run dev",
-  'git commit -m "one more fix"',
-  "building...",
-  "coffee.exe started",
-  "localhost:3000",
-  "deploying...",
-  "fixing production",
-  "refactoring...",
-  "code mode: ON",
+"typing...",
+"npm run dev",
+'git commit -m "one more fix"',
+"building...",
+"coffee.exe started",
+"localhost:3000",
+"deploying...",
+"fixing production",
+"refactoring...",
+"code mode: ON",
 ];
 
 /* =========================================================
-   COMPONENT
+COMPONENT
 ========================================================= */
 
 export default function Home() {
-  /* =======================================================
-     REFS
-  ======================================================= */
+/* =======================================================
+REFS
+======================================================= */
 
-  const audioRef = useRef(null);
-  const keyboardRef = useRef(null);
-  const resumeAfterTrackChangeRef = useRef(false);
+const audioRef = useRef(null);
+const keyboardRef = useRef(null);
 
-  /* =======================================================
-     WALLPAPER
-  ======================================================= */
+/*
 
-  const [wallpaper, setWallpaper] =
-    useState("/wallpaper.jpg");
+* Metadata is cached in memory so we don't request
+* metadata again every time the same song is played.
+  */
+  const metadataCacheRef = useRef(new Map());
 
-  /* =======================================================
-     MUSIC
-  ======================================================= */
+/*
 
-  const [playlists, setPlaylists] = useState([]);
+* Prevent duplicate metadata requests.
+  */
+  const metadataRequestRef = useRef(null);
 
-  const [loadingMusic, setLoadingMusic] =
-    useState(true);
+/*
 
-  const [musicError, setMusicError] = useState("");
+* Tells the audio effect whether a song change should
+* automatically start playback.
+  */
+  const resumeAfterTrackChangeRef =
+  useRef(false);
 
-  /* =======================================================
-     CURRENT PLAYLIST
-  ======================================================= */
+/* =======================================================
+WALLPAPER
+======================================================= */
 
-  const [selectedPlaylistId, setSelectedPlaylistId] =
-    useState("");
+const [wallpaper, setWallpaper] =
+useState("/wallpaper.jpg");
 
-  const [current, setCurrent] = useState(0);
+/* =======================================================
+MUSIC
+======================================================= */
 
-  // The song being played is intentionally independent from the
-  // playlist currently being viewed in the playlist panel.
-  // This means changing playlist tabs never changes the audio source.
-  const [currentSong, setCurrentSong] = useState(null);
+const [playlists, setPlaylists] =
+useState([]);
 
-  /* =======================================================
-     PLAYER
-  ======================================================= */
+const [loadingMusic, setLoadingMusic] =
+useState(true);
 
-  const [playing, setPlaying] = useState(false);
+const [musicError, setMusicError] =
+useState("");
 
-  const [progress, setProgress] = useState(0);
+/* =======================================================
+CURRENT PLAYLIST
+======================================================= */
 
-  const [duration, setDuration] = useState(0);
+const [selectedPlaylistId, setSelectedPlaylistId] =
+useState("");
 
-  const [volume, setVolume] = useState(0.82);
+/*
 
-  const [muted, setMuted] = useState(false);
+* Index of the currently playing song
+* inside the currently selected playlist.
+  */
+  const [current, setCurrent] =
+  useState(0);
 
-  /* =======================================================
-     UI
-  ======================================================= */
+/*
 
-  const [showPlaylist, setShowPlaylist] =
-    useState(false);
+* IMPORTANT:
+*
+* The playing song is independent from the playlist
+* currently being viewed.
+*
+* Switching playlists therefore does NOT change
+* the audio.
+  */
+  const [currentSong, setCurrentSong] =
+  useState(null);
 
-  /* =======================================================
-     OFFICE SOUNDS
-  ======================================================= */
+/* =======================================================
+PLAYER
+======================================================= */
 
-  const [keyboardOn, setKeyboardOn] =
-    useState(false);
+const [playing, setPlaying] =
+useState(false);
 
-  const [activeKeys, setActiveKeys] =
-    useState([]);
+const [progress, setProgress] =
+useState(0);
 
-  const [officeText, setOfficeText] =
-    useState("ready.");
+const [duration, setDuration] =
+useState(0);
 
-  /* =======================================================
-     CURRENT PLAYLIST
-  ======================================================= */
+const [volume, setVolume] =
+useState(0.82);
 
-  const currentPlaylist = useMemo(() => {
-    if (!playlists.length) {
-      return null;
+const [muted, setMuted] =
+useState(false);
+
+/* =======================================================
+UI
+======================================================= */
+
+const [showPlaylist, setShowPlaylist] =
+useState(false);
+
+/* =======================================================
+OFFICE SOUNDS
+======================================================= */
+
+const [keyboardOn, setKeyboardOn] =
+useState(false);
+
+const [activeKeys, setActiveKeys] =
+useState([]);
+
+const [officeText, setOfficeText] =
+useState("ready.");
+
+/* =======================================================
+CURRENT PLAYLIST
+======================================================= */
+
+const currentPlaylist = useMemo(() => {
+if (!playlists.length) {
+return null;
+}
+
+
+return (
+  playlists.find(
+    (playlist) =>
+      playlist.id ===
+      selectedPlaylistId
+  ) || playlists[0]
+);
+
+
+}, [
+playlists,
+selectedPlaylistId,
+]);
+
+/* =======================================================
+CURRENT SONG
+======================================================= */
+
+const song = currentSong;
+
+/* =======================================================
+LOAD MUSIC LIBRARY
+======================================================= */
+
+useEffect(() => {
+let cancelled = false;
+
+
+async function loadMusic() {
+  try {
+    setLoadingMusic(true);
+    setMusicError("");
+
+    const response =
+      await fetch("/api/music", {
+        cache: "no-store",
+      });
+
+    if (!response.ok) {
+      throw new Error(
+        `Music API returned ${response.status}`
+      );
     }
 
-    return (
-      playlists.find(
-        (playlist) =>
-          playlist.id === selectedPlaylistId
-      ) || playlists[0]
+    const data =
+      await response.json();
+
+    if (cancelled) {
+      return;
+    }
+
+    const loadedPlaylists =
+      Array.isArray(
+        data.playlists
+      )
+        ? data.playlists
+        : [];
+
+    setPlaylists(
+      loadedPlaylists
     );
-  }, [playlists, selectedPlaylistId]);
 
-  /* =======================================================
-     CURRENT SONG
+    /*
+     * Select the first playlist initially.
+     *
+     * We intentionally do NOT autoplay
+     * the first song.
+     */
+    if (
+      loadedPlaylists.length > 0
+    ) {
+      const firstPlaylist =
+        loadedPlaylists[0];
 
-     IMPORTANT: this is NOT derived from currentPlaylist.
-     Playlist tabs are navigation only; the audio keeps playing
-     the exact same song until the user clicks another track.
-  ======================================================= */
+      const firstSong =
+        firstPlaylist.tracks?.[0] ||
+        null;
 
-  const song = currentSong;
+      setSelectedPlaylistId(
+        firstPlaylist.id
+      );
 
-  /* =======================================================
-     LOAD MUSIC
-  ======================================================= */
+      setCurrent(0);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadMusic() {
-      try {
-        setLoadingMusic(true);
-        setMusicError("");
-
-        const response = await fetch("/api/music", {
-          next: {
-            revalidate: 300,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            `Music API returned ${response.status}`
-          );
-        }
-
-        const data = await response.json();
-
-        if (cancelled) {
-          return;
-        }
-
-        const loadedPlaylists =
-          Array.isArray(data.playlists)
-            ? data.playlists
-            : [];
-
-        setPlaylists(loadedPlaylists);
-
-        if (loadedPlaylists.length > 0) {
-          setSelectedPlaylistId(
-            loadedPlaylists[0].id
-          );
-
-          setCurrent(0);
-          setCurrentSong(
-            loadedPlaylists[0].tracks?.[0] || null
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Unable to load music:",
-          error
-        );
-
-        if (!cancelled) {
-          setMusicError(
-            "Unable to load music from public/music."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingMusic(false);
-        }
-      }
+      setCurrentSong(
+        firstSong
+      );
     }
+  } catch (error) {
+    console.error(
+      "Unable to load music:",
+      error
+    );
 
-    loadMusic();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /* =======================================================
-     APPLY MUSIC VOLUME
-  ======================================================= */
-
-  useEffect(() => {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
+    if (!cancelled) {
+      setMusicError(
+        "Unable to load music."
+      );
     }
-
-    audio.muted = false;
-    audio.volume = muted ? 0 : volume;
-  }, [volume, muted]);
-
-  /* =======================================================
-     OFFICE SOUND
-     
-     ALWAYS 50%
-  ======================================================= */
-
-  useEffect(() => {
-    const keyboard = keyboardRef.current;
-
-    if (!keyboard) {
-      return;
+  } finally {
+    if (!cancelled) {
+      setLoadingMusic(false);
     }
+  }
+}
 
-    keyboard.volume = 0.5;
-    keyboard.loop = true;
+loadMusic();
 
-    if (keyboardOn) {
-      keyboard
-        .play()
-        .catch((error) => {
-          console.warn(
-            "Office ambience could not start:",
-            error
-          );
-        });
-    } else {
-      keyboard.pause();
+return () => {
+  cancelled = true;
+};
 
-      try {
-        keyboard.currentTime = 0;
-      } catch {
-        // Ignore browser restrictions.
-      }
-    }
-  }, [keyboardOn]);
 
-  /* =======================================================
-     OFFICE VISUAL ANIMATION
-  ======================================================= */
+}, []);
 
-  useEffect(() => {
-    if (!keyboardOn) {
-      setActiveKeys([]);
-      setOfficeText("ready.");
+/* =======================================================
+APPLY MUSIC VOLUME
+======================================================= */
 
-      return;
-    }
+useEffect(() => {
+const audio =
+audioRef.current;
 
-    let timeout;
 
-    const chars = [
-      "A",
-      "S",
-      "D",
-      "F",
-      "J",
-      "K",
-      "L",
-      ";",
-      "⌘",
-      "SHIFT",
-      "SPACE",
-      "ENTER",
+if (!audio) {
+  return;
+}
+
+audio.volume =
+  muted ? 0 : volume;
+
+audio.muted = false;
+
+
+}, [
+volume,
+muted,
+]);
+
+/* =======================================================
+OFFICE SOUND
+
+
+ ALWAYS 50%
+
+
+======================================================= */
+
+useEffect(() => {
+const keyboard =
+keyboardRef.current;
+
+
+if (!keyboard) {
+  return;
+}
+
+keyboard.volume = 0.5;
+keyboard.loop = true;
+
+if (keyboardOn) {
+  keyboard
+    .play()
+    .catch((error) => {
+      console.warn(
+        "Office ambience could not start:",
+        error
+      );
+    });
+} else {
+  keyboard.pause();
+
+  try {
+    keyboard.currentTime = 0;
+  } catch {
+    // Ignore browser restrictions.
+  }
+}
+
+
+}, [keyboardOn]);
+
+/* =======================================================
+OFFICE VISUAL ANIMATION
+======================================================= */
+
+useEffect(() => {
+if (!keyboardOn) {
+setActiveKeys([]);
+setOfficeText("ready.");
+
+
+  return;
+}
+
+let timeout;
+
+const chars = [
+  "A",
+  "S",
+  "D",
+  "F",
+  "J",
+  "K",
+  "L",
+  ";",
+  "⌘",
+  "SHIFT",
+  "SPACE",
+  "ENTER",
+];
+
+const cycle = () => {
+  const selected =
+    chars[
+      Math.floor(
+        Math.random() *
+          chars.length
+      )
     ];
 
-    const cycle = () => {
-      const selected =
-        chars[
-        Math.floor(
-          Math.random() * chars.length
-        )
-        ];
-
-      const line =
-        officeLines[
-        Math.floor(
-          Math.random() *
+  const line =
+    officeLines[
+      Math.floor(
+        Math.random() *
           officeLines.length
-        )
-        ];
+      )
+    ];
 
-      setActiveKeys([selected]);
-      setOfficeText(line);
+  setActiveKeys([
+    selected,
+  ]);
 
-      timeout = setTimeout(() => {
-        setActiveKeys([]);
+  setOfficeText(line);
 
-        timeout = setTimeout(
-          cycle,
-          120 + Math.random() * 800
-        );
-      }, 55 + Math.random() * 130);
+  timeout = setTimeout(() => {
+    setActiveKeys([]);
+
+    timeout = setTimeout(
+      cycle,
+      120 +
+        Math.random() * 800
+    );
+  }, 55 + Math.random() * 130);
+};
+
+cycle();
+
+return () => {
+  clearTimeout(timeout);
+};
+
+
+}, [keyboardOn]);
+
+/* =======================================================
+APPLY METADATA TO CURRENT TRACK
+======================================================= */
+
+const applyMetadataToTrack = (
+trackId,
+metadata
+) => {
+if (!metadata) {
+return;
+}
+
+
+/*
+ * Update the currently playing song.
+ */
+
+setCurrentSong(
+  (currentTrack) => {
+    if (
+      !currentTrack ||
+      currentTrack.id !==
+        trackId
+    ) {
+      return currentTrack;
+    }
+
+    return {
+      ...currentTrack,
+
+      title:
+        metadata.title ||
+        currentTrack.title,
+
+      artist:
+        metadata.artist ||
+        currentTrack.artist,
+
+      album:
+        metadata.album ||
+        currentTrack.album,
+
+      albumArtist:
+        metadata.albumArtist ||
+        currentTrack.albumArtist,
+
+      year:
+        metadata.year ??
+        currentTrack.year,
+
+      genre:
+        metadata.genre ||
+        currentTrack.genre,
+
+      track:
+        metadata.track ??
+        currentTrack.track,
+
+      disk:
+        metadata.disk ??
+        currentTrack.disk,
+
+      composer:
+        metadata.composer ||
+        currentTrack.composer,
+
+      picture:
+        metadata.picture ||
+        currentTrack.picture ||
+        null,
     };
+  }
+);
 
-    cycle();
+/*
+ * Also update the copy inside playlists.
+ *
+ * This means that after a song has been played,
+ * its artist/album information will also appear
+ * in the playlist modal.
+ */
 
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [keyboardOn]);
+setPlaylists(
+  (previousPlaylists) =>
+    previousPlaylists.map(
+      (playlist) => ({
+        ...playlist,
 
-  /* =======================================================
-     PLAYLIST OVERLAY
+        tracks:
+          playlist.tracks?.map(
+            (playlistTrack) => {
+              if (
+                playlistTrack.id !==
+                trackId
+              ) {
+                return playlistTrack;
+              }
 
-     Opening/closing the playlist is a UI-only action.
-     It must NEVER pause, reset, or replace the current song.
-  ======================================================= */
+              return {
+                ...playlistTrack,
 
-  const openPlaylist = () => {
-    setShowPlaylist(true);
-  };
+                title:
+                  metadata.title ||
+                  playlistTrack.title,
 
-  /* =======================================================
-     CHANGE PLAYLIST
+                artist:
+                  metadata.artist ||
+                  playlistTrack.artist,
 
-     This ONLY changes which playlist is displayed in the modal.
-     It deliberately does NOT touch audio, current song, progress,
-     duration, or playing state.
-  ======================================================= */
+                album:
+                  metadata.album ||
+                  playlistTrack.album,
 
-  const changePlaylist = (playlistId) => {
-    const playlist = playlists.find(
-      (item) => item.id === playlistId
+                albumArtist:
+                  metadata.albumArtist ||
+                  playlistTrack.albumArtist,
+
+                year:
+                  metadata.year ??
+                  playlistTrack.year,
+
+                genre:
+                  metadata.genre ||
+                  playlistTrack.genre,
+
+                track:
+                  metadata.track ??
+                  playlistTrack.track,
+
+                disk:
+                  metadata.disk ??
+                  playlistTrack.disk,
+
+                composer:
+                  metadata.composer ||
+                  playlistTrack.composer,
+
+                picture:
+                  metadata.picture ||
+                  playlistTrack.picture ||
+                  null,
+              };
+            }
+          ),
+      })
+    )
+);
+
+
+};
+
+/* =======================================================
+LOAD SONG METADATA
+
+
+ IMPORTANT:
+ 
+ This happens AFTER playback starts.
+ 
+ The audio file itself is NOT downloaded by
+ /api/music during initial playlist loading.
+
+
+======================================================= */
+
+const loadSongMetadata =
+async (track) => {
+if (!track?.id) {
+return;
+}
+
+
+  /*
+   * Already cached?
+   */
+
+  if (
+    metadataCacheRef.current.has(
+      track.id
+    )
+  ) {
+    const metadata =
+      metadataCacheRef.current.get(
+        track.id
+      );
+
+    applyMetadataToTrack(
+      track.id,
+      metadata
     );
 
-    if (!playlist) {
-      return;
+    return;
+  }
+
+  /*
+   * Same request already running?
+   */
+
+  if (
+    metadataRequestRef.current ===
+    track.id
+  ) {
+    return;
+  }
+
+  metadataRequestRef.current =
+    track.id;
+
+  try {
+    const response =
+      await fetch(
+        `/api/music/metadata?path=${encodeURIComponent(
+          track.id
+        )}`
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `Metadata request failed: ${response.status}`
+      );
     }
 
-    setSelectedPlaylistId(playlistId);
-  };
-
-  /* =======================================================
-     CHANGE SONG
-  ======================================================= */
-
-  const changeSong = (
-    index,
-    autoPlay = true
-  ) => {
-    if (!currentPlaylist?.tracks?.length) {
-      return;
-    }
+    const result =
+      await response.json();
 
     if (
-      index < 0 ||
-      index >= currentPlaylist.tracks.length
+      !result.success ||
+      !result.metadata
     ) {
       return;
     }
 
-    const nextSong = currentPlaylist.tracks[index];
-    const audio = audioRef.current;
+    const metadata =
+      result.metadata;
 
-    // Only an explicit song click is allowed to replace the audio source.
-    if (audio) {
-      audio.pause();
-      try {
-        audio.currentTime = 0;
-      } catch {
-        // Ignore browser restrictions.
-      }
+    /*
+     * Cache metadata.
+     */
+
+    metadataCacheRef.current.set(
+      track.id,
+      metadata
+    );
+
+    /*
+     * Apply metadata to UI.
+     */
+
+    applyMetadataToTrack(
+      track.id,
+      metadata
+    );
+  } catch (error) {
+    console.error(
+      "Metadata loading failed:",
+      error
+    );
+  } finally {
+    if (
+      metadataRequestRef.current ===
+      track.id
+    ) {
+      metadataRequestRef.current =
+        null;
     }
+  }
+};
 
-    setCurrent(index);
-    setCurrentSong(nextSong);
-    setProgress(0);
-    setDuration(0);
-    setPlaying(false);
 
-    resumeAfterTrackChangeRef.current = Boolean(autoPlay);
-  };
+/* =======================================================
+PLAY CURRENT SONG AFTER SOURCE CHANGE
 
-  /* =======================================================
-     PLAY / PAUSE
-  ======================================================= */
 
-  const togglePlay = async () => {
-    const audio = audioRef.current;
+ THIS FIXES NEXT / PREVIOUS.
+ 
+ We let React change:
+ 
+   <audio src={song.file}>
+ 
+ first.
+ 
+ Then we call play().
+ 
+ This avoids the race condition caused by manually
+ changing audio.src and React changing it at the
+ same time.
 
-    if (!audio || !song?.file) {
+
+======================================================= */
+
+useEffect(() => {
+const audio =
+audioRef.current;
+
+
+if (!audio || !song?.file) {
+  return;
+}
+
+let cancelled = false;
+
+const loadAndPlay = async () => {
+  /*
+   * Wait until React/browser has applied the
+   * new src to the audio element.
+   */
+
+  await new Promise((resolve) => {
+    requestAnimationFrame(
+      resolve
+    );
+  });
+
+  if (cancelled) {
+    return;
+  }
+
+  /*
+   * Only automatically play when the user:
+   *
+   * - clicked another song
+   * - pressed Next
+   * - pressed Previous
+   */
+
+  if (
+    !resumeAfterTrackChangeRef.current
+  ) {
+    return;
+  }
+
+  /*
+   * Consume the flag.
+   */
+
+  resumeAfterTrackChangeRef.current =
+    false;
+
+  try {
+    await audio.play();
+
+    if (cancelled) {
       return;
     }
 
-    try {
-      if (audio.paused) {
-        await audio.play();
+    setPlaying(true);
 
-        setPlaying(true);
-      } else {
-        audio.pause();
+    /*
+     * Metadata starts after playback.
+     */
 
-        setPlaying(false);
-      }
-    } catch (error) {
-      console.error(
-        "Unable to play song:",
-        error
+    loadSongMetadata(
+      song
+    );
+  } catch (error) {
+    console.error(
+      "Unable to automatically play song:",
+      error
+    );
+
+    if (!cancelled) {
+      setPlaying(false);
+    }
+  }
+};
+
+loadAndPlay();
+
+return () => {
+  cancelled = true;
+};
+
+
+}, [song?.file]);
+
+/* =======================================================
+PLAY / PAUSE
+======================================================= */
+
+const togglePlay =
+async () => {
+const audio =
+audioRef.current;
+
+
+  if (
+    !audio ||
+    !song?.file
+  ) {
+    return;
+  }
+
+  try {
+    if (
+      audio.paused
+    ) {
+      await audio.play();
+
+      setPlaying(true);
+
+      /*
+       * Metadata starts only once playback starts.
+       */
+
+      loadSongMetadata(
+        song
       );
+    } else {
+      audio.pause();
 
       setPlaying(false);
     }
-  };
-
-  /* =======================================================
-     NEXT
-  ======================================================= */
-
-  const next = () => {
-    if (!currentPlaylist?.tracks?.length) {
-      return;
-    }
-
-    const nextIndex =
-      (current + 1) %
-      currentPlaylist.tracks.length;
-
-    changeSong(nextIndex, true);
-  };
-
-  /* =======================================================
-     PREVIOUS
-  ======================================================= */
-
-  const previous = () => {
-    if (!currentPlaylist?.tracks?.length) {
-      return;
-    }
-
-    const audio = audioRef.current;
-
-    if (
-      audio &&
-      audio.currentTime > 3
-    ) {
-      audio.currentTime = 0;
-      setProgress(0);
-
-      return;
-    }
-
-    const previousIndex =
-      (current -
-        1 +
-        currentPlaylist.tracks.length) %
-      currentPlaylist.tracks.length;
-
-    changeSong(previousIndex, true);
-  };
-
-  /* =======================================================
-     WALLPAPER
-  ======================================================= */
-
-  const handleWallpaperChange = (
-    event
-  ) => {
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const imageUrl =
-      URL.createObjectURL(file);
-
-    setWallpaper(imageUrl);
-  };
-
-  /* =======================================================
-     WALLPAPER CLEANUP
-  ======================================================= */
-
-  useEffect(() => {
-    return () => {
-      if (
-        wallpaper?.startsWith("blob:")
-      ) {
-        URL.revokeObjectURL(
-          wallpaper
-        );
-      }
-    };
-  }, [wallpaper]);
-
-  /* =======================================================
-     LOADING
-  ======================================================= */
-
-  if (loadingMusic) {
-    return (
-      <main className="page loading-page">
-        <div className="loading-content">
-          <Code2 size={18} />
-
-          <span>
-            loading playlist...
-          </span>
-        </div>
-      </main>
+  } catch (error) {
+    console.error(
+      "Unable to play song:",
+      error
     );
+
+    setPlaying(false);
+  }
+};
+
+
+/* =======================================================
+CHANGE SONG
+
+
+ IMPORTANT:
+ 
+ This function DOES NOT directly change audio.src.
+ 
+ It only changes React state.
+ 
+ React then updates:
+ 
+   <audio src={song.file}>
+ 
+ and the effect above automatically plays it.
+
+
+======================================================= */
+
+const changeSong = (
+index,
+autoPlay = true
+) => {
+if (
+!currentPlaylist?.tracks
+?.length
+) {
+return;
+}
+
+
+if (
+  index < 0 ||
+  index >=
+    currentPlaylist.tracks.length
+) {
+  return;
+}
+
+const nextSong =
+  currentPlaylist.tracks[
+    index
+  ];
+
+/*
+ * Tell the audio effect whether this
+ * new song should start automatically.
+ */
+
+resumeAfterTrackChangeRef.current =
+  Boolean(autoPlay);
+
+/*
+ * Stop current audio.
+ */
+
+const audio =
+  audioRef.current;
+
+if (audio) {
+  audio.pause();
+
+  try {
+    audio.currentTime = 0;
+  } catch {
+    // Ignore browser restrictions.
+  }
+}
+
+/*
+ * Update state.
+ */
+
+setCurrent(index);
+
+setCurrentSong(
+  nextSong
+);
+
+setProgress(0);
+setDuration(0);
+setPlaying(false);
+
+
+};
+
+/* =======================================================
+CHANGE PLAYLIST
+
+
+ THIS MUST NEVER TOUCH THE AUDIO.
+
+
+======================================================= */
+
+const changePlaylist =
+(playlistId) => {
+const playlist =
+playlists.find(
+(item) =>
+item.id ===
+playlistId
+);
+
+
+  if (!playlist) {
+    return;
   }
 
-  /* =======================================================
-     RENDER
-  ======================================================= */
+  /*
+   * Only change which playlist is displayed.
+   */
 
-  return (
-    <main
-      className="page"
-      style={{
-        "--wallpaper": `url("${wallpaper}")`,
-      }}
+  setSelectedPlaylistId(
+    playlistId
+  );
+
+  /*
+   * DO NOT:
+   *
+   * setCurrent(...)
+   * setCurrentSong(...)
+   * audio.pause()
+   * audio.currentTime = 0
+   *
+   * The existing song keeps playing.
+   */
+};
+
+
+/* =======================================================
+NEXT
+======================================================= */
+
+const next =
+() => {
+if (
+!currentPlaylist?.tracks
+?.length
+) {
+return;
+}
+
+
+  const nextIndex =
+    (current + 1) %
+    currentPlaylist.tracks.length;
+
+  changeSong(
+    nextIndex,
+    true
+  );
+};
+
+
+/* =======================================================
+PREVIOUS
+======================================================= */
+
+const previous =
+() => {
+if (
+!currentPlaylist?.tracks
+?.length
+) {
+return;
+}
+
+
+  const audio =
+    audioRef.current;
+
+  /*
+   * If we're more than 3 seconds into
+   * the song, restart the current song.
+   */
+
+  if (
+    audio &&
+    audio.currentTime > 3
+  ) {
+    audio.currentTime = 0;
+
+    setProgress(0);
+
+    return;
+  }
+
+  const previousIndex =
+    (
+      current -
+      1 +
+      currentPlaylist.tracks.length
+    ) %
+    currentPlaylist.tracks.length;
+
+  changeSong(
+    previousIndex,
+    true
+  );
+};
+
+
+/* =======================================================
+AUDIO METADATA EVENT
+======================================================= */
+
+const handleLoadedMetadata =
+(event) => {
+const value =
+event.currentTarget
+.duration;
+
+
+  if (
+    Number.isFinite(
+      value
+    )
+  ) {
+    setDuration(value);
+  }
+};
+
+
+/* =======================================================
+AUDIO DURATION
+======================================================= */
+
+const handleDurationChange =
+(event) => {
+const value =
+event.currentTarget
+.duration;
+
+
+  if (
+    Number.isFinite(
+      value
+    )
+  ) {
+    setDuration(value);
+  }
+};
+
+
+/* =======================================================
+AUDIO PROGRESS
+======================================================= */
+
+const handleTimeUpdate =
+(event) => {
+setProgress(
+event.currentTarget
+.currentTime
+);
+};
+
+/* =======================================================
+WALLPAPER
+======================================================= */
+
+const handleWallpaperChange =
+(event) => {
+const file =
+event.target.files?.[0];
+
+
+  if (!file) {
+    return;
+  }
+
+  const imageUrl =
+    URL.createObjectURL(
+      file
+    );
+
+  setWallpaper(
+    imageUrl
+  );
+};
+
+
+/* =======================================================
+WALLPAPER CLEANUP
+======================================================= */
+
+useEffect(() => {
+return () => {
+if (
+wallpaper?.startsWith(
+"blob:"
+)
+) {
+URL.revokeObjectURL(
+wallpaper
+);
+}
+};
+}, [wallpaper]);
+
+/* =======================================================
+LOADING
+======================================================= */
+
+if (loadingMusic) {
+return ( <main className="page loading-page"> <div className="loading-content"> <Code2 size={18} />
+
+
+      <span>
+        loading playlist...
+      </span>
+    </div>
+  </main>
+);
+
+
+}
+
+/* =======================================================
+RENDER
+======================================================= */
+
+return (
+<main
+className="page"
+style={{
+"--wallpaper": `url("${wallpaper}")`,
+}}
+>
+
+
+  {/* =================================================
+      BACKGROUND
+  ================================================= */}
+
+  <div className="bg-image" />
+
+  <div className="bg-vignette" />
+
+  <div className="grain" />
+
+  {/* =================================================
+      WALLPAPER INPUT
+  ================================================= */}
+
+  <input
+    id="wallpaper-input"
+    className="wallpaper-input"
+    type="file"
+    accept="image/*"
+    onChange={
+      handleWallpaperChange
+    }
+  />
+
+  {/* =================================================
+      TOPBAR
+  ================================================= */}
+
+  <header className="topbar">
+
+    <div className="brand">
+
+      <Code2 size={15} />
+
+      <span>
+        DEV MODE
+      </span>
+
+    </div>
+
+    <div className="status">
+
+      <span className="status-dot" />
+
+      {keyboardOn
+        ? officeText
+        : "focus mode"}
+
+    </div>
+
+    <button
+      type="button"
+      className={`office-top-button ${
+        keyboardOn
+          ? "on"
+          : ""
+      }`}
+      onClick={() =>
+        setKeyboardOn(
+          (value) =>
+            !value
+        )
+      }
+      aria-label="Toggle office sounds"
+      aria-pressed={
+        keyboardOn
+      }
     >
-      {/* =================================================
-          BACKGROUND
-      ================================================= */}
 
-      <div className="bg-image" />
+      <Keyboard size={15} />
 
-      <div className="bg-vignette" />
+      <span>
+        Office sounds
+      </span>
 
-      <div className="grain" />
+      <span className="office-status">
+        {keyboardOn
+          ? "ON · 50%"
+          : "OFF"}
+      </span>
 
-      {/* =================================================
-          WALLPAPER FILE INPUT
-      ================================================= */}
+    </button>
 
-      <input
-        id="wallpaper-input"
-        className="wallpaper-input"
-        type="file"
-        accept="image/*"
-        onChange={
-          handleWallpaperChange
-        }
-      />
+  </header>
 
-      {/* =================================================
-          TOPBAR
-      ================================================= */}
+  {/* =================================================
+      MAIN HERO
+  ================================================= */}
 
-      <header className="topbar">
-        <div className="brand">
-          <Code2 size={15} />
+  <section className="hero">
 
-          <span>DEV MODE</span>
+    <div className="hero-grid">
+
+      <div className="hero-copy">
+
+        <div className="hero-kicker">
+
+          <span className="live-dot" />
+
+          SOFTWARE DEVELOPER · SESSION 01
+
         </div>
 
-        <div className="status">
-          <span className="status-dot" />
+        <h1>
+          Build in silence.
+          <br />
+          <em>
+            Ship with sound.
+          </em>
+        </h1>
 
-          {keyboardOn
-            ? officeText
-            : "focus mode"}
-        </div>
+        <p className="intro">
+          Your private workspace for late-night debugging,
+          focused coding and the soundtrack that keeps
+          the terminal moving.
+        </p>
 
-        <button
-          type="button"
-          className={`office-top-button ${keyboardOn ? "on" : ""
-            }`}
-          onClick={() =>
-            setKeyboardOn(
-              (value) => !value
-            )
-          }
-          aria-label="Toggle office sounds"
-          aria-pressed={keyboardOn}
-        >
-          <Keyboard size={15} />
+        <div className="hero-meta">
 
-          <span>Office sounds</span>
+          <div className="meta-card">
 
-          <span className="office-status">
-            {keyboardOn
-              ? "ON · 50%"
-              : "OFF"}
-          </span>
-        </button>
-      </header>
+            <span>
+              SESSION
+            </span>
 
-      {/* =================================================
-          MAIN HERO
-      ================================================= */}
+            <strong>
+              DEEP WORK
+            </strong>
 
-      <section className="hero">
-        <div className="hero-grid">
-          <div className="hero-copy">
-            <div className="hero-kicker">
-              <span className="live-dot" />
-              SOFTWARE DEVELOPER · SESSION 01
-            </div>
-
-            <h1>
-              Build in silence.
-              <br />
-              <em>Ship with sound.</em>
-            </h1>
-
-            <p className="intro">
-              Your private workspace for late-night debugging,
-              focused coding and the soundtrack that keeps
-              the terminal moving.
-            </p>
-
-            <div className="hero-meta">
-              <div className="meta-card">
-                <span>SESSION</span>
-                <strong>DEEP WORK</strong>
-              </div>
-
-              <div className="meta-card">
-                <span>PLAYLISTS</span>
-                <strong>{playlists.length.toString().padStart(2, "0")}</strong>
-              </div>
-
-              <div className="meta-card">
-                <span>TRACKS</span>
-                <strong>{currentPlaylist?.tracks?.length || 0}</strong>
-              </div>
-            </div>
-
-            <div className="hero-note">
-              <Activity size={14} />
-              <span>focus mode / distraction level: low</span>
-            </div>
           </div>
 
-          {/* =================================================
-            WORKSPACE
+          <div className="meta-card">
+
+            <span>
+              PLAYLISTS
+            </span>
+
+            <strong>
+              {playlists.length
+                .toString()
+                .padStart(
+                  2,
+                  "0"
+                )}
+            </strong>
+
+          </div>
+
+          <div className="meta-card">
+
+            <span>
+              TRACKS
+            </span>
+
+            <strong>
+              {currentPlaylist
+                ?.tracks
+                ?.length ||
+                0}
+            </strong>
+
+          </div>
+
+        </div>
+
+        <div className="hero-note">
+
+          <Activity size={14} />
+
+          <span>
+            focus mode / distraction level: low
+          </span>
+
+        </div>
+
+      </div>
+
+      {/* =================================================
+          WORKSPACE
+      ================================================= */}
+
+      <div className="workspace">
+
+        {/* =================================================
+            TERMINAL
         ================================================= */}
 
-          <div className="workspace">
-            {/* =================================================
-              TERMINAL
-          ================================================= */}
+        <div className="terminal">
 
-            <div className="terminal">
-              <div className="terminal-head">
-                <span className="dots">
-                  <i />
-                  <i />
-                  <i />
-                </span>
+          <div className="terminal-head">
 
-                <span>
-                  ~/workspace
-                </span>
+            <span className="dots">
 
-                <span className="mac">
-                  ●
-                </span>
-              </div>
+              <i />
+              <i />
+              <i />
 
-              <div className="terminal-body">
-                <div>
-                  <b>$</b> whoami
-                </div>
+            </span>
 
-                <div className="output">
-                  software_developer
-                </div>
+            <span>
+              ~/workspace
+            </span>
 
-                <div>
-                  <b>$</b> status
-                </div>
+            <span className="mac">
+              ●
+            </span>
 
-                <div className="output">
-                  building something good...
-                </div>
+          </div>
 
-                <div>
-                  <b>$</b>{" "}
-                  ./playlist --start
-                </div>
+          <div className="terminal-body">
 
-                <div className="cursor-line">
-                  <span className="prompt">
-                    ›
-                  </span>
-
-                  <span className="blink">
-                    █
-                  </span>
-                </div>
-              </div>
+            <div>
+              <b>
+                $
+              </b>{" "}
+              whoami
             </div>
 
-            {/* =================================================
-              PLAYER CARD
+            <div className="output">
+              software_developer
+            </div>
+
+            <div>
+              <b>
+                $
+              </b>{" "}
+              status
+            </div>
+
+            <div className="output">
+              building something good...
+            </div>
+
+            <div>
+              <b>
+                $
+              </b>{" "}
+              ./playlist --start
+            </div>
+
+            <div className="cursor-line">
+
+              <span className="prompt">
+                ›
+              </span>
+
+              <span className="blink">
+                █
+              </span>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            PLAYER CARD
+        ================================================= */}
+
+        <div className="player-card">
+
+          {/* =================================================
+              COVER
           ================================================= */}
 
-            <div className="player-card">
-              {/* =================================================
-                COVER
-            ================================================= */}
+          <div
+            className="cover"
+            style={
+              song?.picture?.data
+                ? {
+                    backgroundImage:
+                      `url("data:${song.picture.format};base64,${song.picture.data}")`,
+                    backgroundSize:
+                      "cover",
+                    backgroundPosition:
+                      "center",
+                  }
+                : undefined
+            }
+          >
 
-              <div className="cover">
+            {!song?.picture?.data && (
+              <>
+
                 <div className="label">
                   DEV
                   <br />
@@ -758,577 +1489,723 @@ export default function Home() {
                 <div className="cover-title">
                   DEEP
                   <br />
-                  <span>WORK</span>
+                  <span>
+                    WORK
+                  </span>
                 </div>
 
                 <div className="cover-small">
                   BUILD · SHIP · REPEAT
                 </div>
-              </div>
 
-              {/* =================================================
-                PLAYER
+              </>
+            )}
+
+          </div>
+
+          {/* =================================================
+              PLAYER
+          ================================================= */}
+
+          <div className="player">
+
+            {/* =================================================
+                NOW PLAYING
             ================================================= */}
 
-              <div className="player">
-                {/* =================================================
+            <div className="now">
+
+              <div className="now-text">
+
+                <div className="tiny">
                   NOW PLAYING
-              ================================================= */}
-
-                <div className="now">
-                  <div className="now-text">
-                    <div className="tiny">
-                      NOW PLAYING
-                    </div>
-
-                    <h2>
-                      {song?.title ||
-                        "No song selected"}
-                    </h2>
-
-                    <p>
-                      {song?.artist ||
-                        "DEV MODE"}
-                    </p>
-                  </div>
-
-                  <Coffee
-                    size={19}
-                    strokeWidth={1.5}
-                  />
                 </div>
 
-                {/* =================================================
-                  MAIN AUDIO
-              ================================================= */}
+                <h2>
+                  {song?.title ||
+                    "No song selected"}
+                </h2>
 
-                {song?.file ? (
-                  <audio
-                    ref={audioRef}
-                    src={song.file}
-                    preload="metadata"
-                    onLoadedMetadata={(
-                      event
-                    ) => {
-                      const value =
-                        event.currentTarget
-                          .duration;
+                <p>
+                  {song?.artist ||
+                    "DEV MODE"}
+                </p>
 
-                      if (
-                        Number.isFinite(
-                          value
-                        )
-                      ) {
-                        setDuration(value);
-                      }
-                    }}
-                    onDurationChange={(
-                      event
-                    ) => {
-                      const value =
-                        event.currentTarget
-                          .duration;
+                {song?.album && (
+                  <small className="now-album">
+                    {song.album}
+                  </small>
+                )}
 
-                      if (
-                        Number.isFinite(
-                          value
-                        )
-                      ) {
-                        setDuration(value);
-                      }
-                    }}
-                    onTimeUpdate={(
-                      event
-                    ) => {
-                      setProgress(
-                        event.currentTarget
-                          .currentTime
-                      );
-                    }}
-                    onPlay={() =>
-                      setPlaying(true)
+              </div>
+
+              <Coffee
+                size={19}
+                strokeWidth={1.5}
+              />
+
+            </div>
+
+            {/* =================================================
+                MAIN AUDIO
+            ================================================= */}
+
+            {song?.file ? (
+              <audio
+                ref={audioRef}
+                src={song.file}
+                preload="metadata"
+
+                onLoadedMetadata={
+                  handleLoadedMetadata
+                }
+
+                onDurationChange={
+                  handleDurationChange
+                }
+
+                onTimeUpdate={
+                  handleTimeUpdate
+                }
+
+                onPlay={() =>
+                  setPlaying(
+                    true
+                  )
+                }
+
+                onPause={() =>
+                  setPlaying(
+                    false
+                  )
+                }
+
+                onEnded={
+                  next
+                }
+
+                onError={() => {
+
+                  console.error(
+                    "Could not load audio:",
+                    song.file
+                  );
+
+                  setPlaying(
+                    false
+                  );
+
+                  setMusicError(
+                    "This audio file could not be played."
+                  );
+
+                }}
+              />
+            ) : null}
+
+            {/* =================================================
+                OFFICE AUDIO
+            ================================================= */}
+
+            <audio
+              ref={
+                keyboardRef
+              }
+              src="/sounds/keyboard.mp3"
+              preload="auto"
+              loop
+            />
+
+            {/* =================================================
+                SEEK
+            ================================================= */}
+
+            <input
+              className="seek"
+              type="range"
+              min="0"
+              max={
+                duration || 0
+              }
+              step="0.1"
+              value={Math.min(
+                progress,
+                duration || 0
+              )}
+              disabled={
+                !song ||
+                !duration
+              }
+              onChange={(
+                event
+              ) => {
+
+                const value =
+                  Number(
+                    event
+                      .target
+                      .value
+                  );
+
+                if (
+                  audioRef.current
+                ) {
+                  audioRef.current.currentTime =
+                    value;
+                }
+
+                setProgress(
+                  value
+                );
+
+              }}
+              style={{
+                "--value": `${
+                  duration
+                    ? Math.min(
+                        100,
+                        (progress /
+                          duration) *
+                          100
+                      )
+                    : 0
+                }%`,
+              }}
+              aria-label="Song progress"
+            />
+
+            {/* =================================================
+                TIMES
+            ================================================= */}
+
+            <div className="times">
+
+              <span>
+                {formatTime(
+                  progress
+                )}
+              </span>
+
+              <span>
+                {formatTime(
+                  duration
+                )}
+              </span>
+
+            </div>
+
+            {/* =================================================
+                PLAYER CONTROLS
+            ================================================= */}
+
+            <div className="controls">
+
+              <button
+                type="button"
+                onClick={
+                  previous
+                }
+                aria-label="Previous track"
+              >
+                <SkipBack
+                  size={19}
+                />
+              </button>
+
+              <button
+                type="button"
+                className="play"
+                onClick={
+                  togglePlay
+                }
+                aria-label={
+                  playing
+                    ? "Pause"
+                    : "Play"
+                }
+              >
+
+                {playing ? (
+                  <Pause
+                    size={21}
+                    strokeWidth={
+                      2
                     }
-                    onPause={() =>
-                      setPlaying(false)
-                    }
-                    onEnded={next}
-                    onError={() => {
-                      console.error(
-                        "Could not load audio:",
-                        song.file
-                      );
-
-                      setPlaying(false);
-                      setMusicError(
-                        "This audio file could not be played."
-                      );
-                    }}
                   />
-                ) : null}
+                ) : (
+                  <Play
+                    size={21}
+                    strokeWidth={
+                      2
+                    }
+                  />
+                )}
 
-                {/* =================================================
-                  OFFICE AUDIO
-              ================================================= */}
+              </button>
 
-                <audio
-                  ref={keyboardRef}
-                  src="/sounds/keyboard.mp3"
-                  preload="auto"
-                  loop
+              <button
+                type="button"
+                onClick={
+                  next
+                }
+                aria-label="Next track"
+              >
+                <SkipForward
+                  size={19}
+                />
+              </button>
+
+            </div>
+
+            {/* =================================================
+                BOTTOM CONTROLS
+            ================================================= */}
+
+            <div className="bottom-controls">
+
+              <button
+                type="button"
+                className="playlist-button"
+                onClick={() =>
+                  setShowPlaylist(
+                    true
+                  )
+                }
+                disabled={
+                  !playlists.length
+                }
+              >
+
+                <ListMusic
+                  size={16}
                 />
 
-                {/* =================================================
-                  SEEK
+                <span>
+                  {currentPlaylist
+                    ?.name ||
+                    "No playlists"}
+                </span>
+
+                <ChevronDown
+                  size={15}
+                />
+
+              </button>
+
+              {/* =================================================
+                  VOLUME
               ================================================= */}
 
+              <div className="volume">
+
+                <button
+                  type="button"
+                  className="volume-button"
+                  onClick={() =>
+                    setMuted(
+                      (value) =>
+                        !value
+                    )
+                  }
+                  aria-label={
+                    muted
+                      ? "Unmute"
+                      : "Mute"
+                  }
+                >
+
+                  {muted ? (
+                    <VolumeX
+                      size={17}
+                    />
+                  ) : (
+                    <Volume2
+                      size={17}
+                    />
+                  )}
+
+                </button>
+
                 <input
-                  className="seek"
+                  className="volume-slider"
                   type="range"
                   min="0"
-                  max={duration || 0}
-                  step="0.1"
-                  value={Math.min(
-                    progress,
-                    duration || 0
-                  )}
-                  disabled={
-                    !song ||
-                    !duration
+                  max="1"
+                  step="0.01"
+                  value={
+                    muted
+                      ? 0
+                      : volume
                   }
-                  onChange={(event) => {
-                    const value =
+                  style={{
+                    "--volume": `${
+                      (muted
+                        ? 0
+                        : volume) *
+                      100
+                    }%`,
+                  }}
+                  onChange={(
+                    event
+                  ) => {
+
+                    const newVolume =
                       Number(
-                        event.target.value
+                        event
+                          .target
+                          .value
                       );
+
+                    setVolume(
+                      newVolume
+                    );
+
+                    setMuted(
+                      newVolume ===
+                        0
+                    );
 
                     if (
                       audioRef.current
                     ) {
-                      audioRef.current.currentTime =
-                        value;
+                      audioRef.current.volume =
+                        newVolume;
+
+                      audioRef.current.muted =
+                        false;
                     }
 
-                    setProgress(value);
                   }}
-                  style={{
-                    "--value": `${duration
-                      ? Math.min(
-                        100,
-                        (progress /
-                          duration) *
-                        100
-                      )
-                      : 0
-                      }%`,
-                  }}
-                  aria-label="Song progress"
+                  aria-label="Music volume"
                 />
 
-                {/* =================================================
-                  TIMES
-              ================================================= */}
-
-                <div className="times">
-                  <span>
-                    {formatTime(
-                      progress
-                    )}
-                  </span>
-
-                  <span>
-                    {formatTime(
-                      duration
-                    )}
-                  </span>
-                </div>
-
-                {/* =================================================
-                  PLAYER CONTROLS
-              ================================================= */}
-
-                <div className="controls">
-                  <button
-                    type="button"
-                    onClick={previous}
-                    aria-label="Previous track"
-                  >
-                    <SkipBack size={19} />
-                  </button>
-
-                  <button
-                    type="button"
-                    className="play"
-                    onClick={togglePlay}
-                    aria-label={
-                      playing
-                        ? "Pause"
-                        : "Play"
-                    }
-                  >
-                    {playing ? (
-                      <Pause
-                        size={21}
-                        strokeWidth={2}
-                      />
-                    ) : (
-                      <Play
-                        size={21}
-                        strokeWidth={2}
-                      />
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={next}
-                    aria-label="Next track"
-                  >
-                    <SkipForward
-                      size={19}
-                    />
-                  </button>
-                </div>
-
-                {/* =================================================
-                  BOTTOM CONTROLS
-              ================================================= */}
-
-                <div className="bottom-controls">
-                  <button
-                    type="button"
-                    className="playlist-button"
-                    onClick={openPlaylist}
-                    disabled={
-                      !playlists.length
-                    }
-                  >
-                    <ListMusic
-                      size={16}
-                    />
-
-                    <span>
-                      {currentPlaylist?.name ||
-                        "No playlists"}
-                    </span>
-
-                    <ChevronDown
-                      size={15}
-                    />
-                  </button>
-
-                  {/* =================================================
-                    VOLUME
-                ================================================= */}
-
-                  <div className="volume">
-                    <button
-                      type="button"
-                      className="volume-button"
-                      onClick={() =>
-                        setMuted(
-                          (value) => !value
-                        )
-                      }
-                      aria-label={
-                        muted
-                          ? "Unmute"
-                          : "Mute"
-                      }
-                    >
-                      {muted ? (
-                        <VolumeX size={17} />
-                      ) : (
-                        <Volume2 size={17} />
-                      )}
-                    </button>
-
-                    <input
-                      className="volume-slider"
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={muted ? 0 : volume}
-                      style={{
-                        "--volume": `${(muted ? 0 : volume) * 100}%`
-                      }}
-                      onChange={(event) => {
-                        const newVolume =
-                          Number(
-                            event.target
-                              .value
-                          );
-
-                        setVolume(
-                          newVolume
-                        );
-
-                        setMuted(
-                          newVolume === 0
-                        );
-
-                        if (
-                          audioRef.current
-                        ) {
-                          audioRef.current.volume =
-                            newVolume;
-
-                          audioRef.current.muted =
-                            false;
-                        }
-                      }}
-                      aria-label="Music volume"
-                    />
-                  </div>
-                </div>
-
-                {/* =================================================
-                  PLAYLIST SUMMARY
-              ================================================= */}
-
-                <div className="playlist-summary">
-                  <span>
-                    {currentPlaylist?.tracks
-                      ?.length || 0}{" "}
-                    tracks
-                  </span>
-
-                  <span>
-                    {currentPlaylist?.name ||
-                      "Playlist"}
-                  </span>
-                </div>
-
-                {/* =================================================
-                  WALLPAPER
-              ================================================= */}
-
-                <label
-                  htmlFor="wallpaper-input"
-                  className="add-wallpaper"
-                >
-                  <span>
-                    Choose Wallpaper
-                  </span>
-                </label>
-
-                {/* =================================================
-                  ERROR
-              ================================================= */}
-
-                {musicError && (
-                  <div className="music-error">
-                    {musicError}
-                  </div>
-                )}
               </div>
+
             </div>
+
+            {/* =================================================
+                PLAYLIST SUMMARY
+            ================================================= */}
+
+            <div className="playlist-summary">
+
+              <span>
+                {currentPlaylist
+                  ?.tracks
+                  ?.length ||
+                  0}{" "}
+                tracks
+              </span>
+
+              <span>
+                {currentPlaylist
+                  ?.name ||
+                  "Playlist"}
+              </span>
+
+            </div>
+
+            {/* =================================================
+                WALLPAPER
+            ================================================= */}
+
+            <label
+              htmlFor="wallpaper-input"
+              className="add-wallpaper"
+            >
+              <span>
+                Choose Wallpaper
+              </span>
+            </label>
+
+            {/* =================================================
+                ERROR
+            ================================================= */}
+
+            {musicError && (
+              <div className="music-error">
+                {musicError}
+              </div>
+            )}
+
           </div>
 
         </div>
-      </section>
 
-      {/* =================================================
-          PLAYLIST MODAL
-      ================================================= */}
+      </div>
 
-      {showPlaylist && (
-        <div
-          className="playlist-overlay"
-          onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              playlistWasPlayingRef.current = false;
-              setShowPlaylist(false);
+    </div>
+
+  </section>
+
+  {/* =================================================
+      PLAYLIST MODAL
+  ================================================= */}
+
+  {showPlaylist && (
+    <div
+      className="playlist-overlay"
+      onMouseDown={(
+        event
+      ) => {
+
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          setShowPlaylist(
+            false
+          );
+        }
+
+      }}
+    >
+
+      <div
+        className="playlist-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Playlist selector"
+      >
+
+        {/* =================================================
+            MODAL HEADER
+        ================================================= */}
+
+        <div className="playlist-modal-header">
+
+          <div>
+
+            <div className="tiny">
+              PLAYLISTS
+            </div>
+
+            <h3>
+              Choose your session
+            </h3>
+
+          </div>
+
+          <button
+            type="button"
+            className="modal-close"
+            onClick={() =>
+              setShowPlaylist(
+                false
+              )
             }
-          }}
-        >
-          <div
-            className="playlist-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Playlist selector"
+            aria-label="Close playlist"
           >
-            {/* =================================================
-                MODAL HEADER
-            ================================================= */}
+            <X size={18} />
+          </button>
 
-            <div className="playlist-modal-header">
-              <div>
-                <div className="tiny">
-                  PLAYLISTS
-                </div>
+        </div>
 
-                <h3>
-                  Choose your session
-                </h3>
-              </div>
+        {/* =================================================
+            PLAYLIST TABS
+        ================================================= */}
+
+        <div className="playlist-tabs">
+
+          {playlists.map(
+            (playlist) => (
 
               <button
                 type="button"
-                className="modal-close"
-                onClick={() => {
-                  setShowPlaylist(false);
-                }}
-                aria-label="Close playlist"
+                key={
+                  playlist.id
+                }
+                className={`playlist-tab ${
+                  playlist.id ===
+                  selectedPlaylistId
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  changePlaylist(
+                    playlist.id
+                  )
+                }
               >
-                <X size={18} />
+
+                <span>
+                  {playlist.name}
+                </span>
+
+                <small>
+                  {playlist.tracks
+                    ?.length ||
+                    0}
+                </small>
+
               </button>
-            </div>
 
-            {/* =================================================
-                PLAYLIST TABS
-            ================================================= */}
+            )
+          )}
 
-            <div className="playlist-tabs">
-              {playlists.map(
-                (playlist) => (
-                  <button
-                    type="button"
-                    key={playlist.id}
-                    className={`playlist-tab ${playlist.id ===
-                      selectedPlaylistId
+        </div>
+
+        {/* =================================================
+            SONG HEADER
+        ================================================= */}
+
+        <div className="modal-song-heading">
+
+          <span>
+            {currentPlaylist
+              ?.name ||
+              "Songs"}
+          </span>
+
+          <small>
+            {currentPlaylist
+              ?.tracks
+              ?.length ||
+              0}{" "}
+            songs
+          </small>
+
+        </div>
+
+        {/* =================================================
+            SONG SCROLLER
+        ================================================= */}
+
+        <div className="modal-song-list">
+
+          {currentPlaylist
+            ?.tracks
+            ?.map(
+              (
+                item,
+                index
+              ) => (
+
+                <button
+                  type="button"
+                  key={
+                    item.id ||
+                    item.file ||
+                    `${item.title}-${index}`
+                  }
+                  className={`modal-track ${
+                    item.file &&
+                    song?.file ===
+                      item.file
                       ? "active"
                       : ""
-                      }`}
-                    onClick={() => {
-                      changePlaylist(
-                        playlist.id
-                      );
-                    }}
-                  >
-                    <span>
-                      {playlist.name}
-                    </span>
+                  }`}
+                  onClick={() => {
+
+                    changeSong(
+                      index,
+                      true
+                    );
+
+                    setShowPlaylist(
+                      false
+                    );
+
+                  }}
+                >
+
+                  <span className="track-number">
+
+                    {String(
+                      index + 1
+                    ).padStart(
+                      2,
+                      "0"
+                    )}
+
+                  </span>
+
+                  <span className="track-details">
+
+                    <strong>
+                      {item.title ||
+                        "Unknown title"}
+                    </strong>
 
                     <small>
-                      {playlist.tracks
-                        ?.length || 0}
+                      {item.artist ||
+                        "Unknown artist"}
                     </small>
-                  </button>
-                )
-              )}
+
+                    {item.album && (
+                      <em>
+                        {item.album}
+                      </em>
+                    )}
+
+                  </span>
+
+                  <span className="track-action">
+
+                    {item.file &&
+                    song?.file ===
+                      item.file &&
+                    playing ? (
+
+                      <span className="bars">
+
+                        <i />
+                        <i />
+                        <i />
+
+                      </span>
+
+                    ) : (
+
+                      <Play
+                        size={15}
+                      />
+
+                    )}
+
+                  </span>
+
+                </button>
+
+              )
+            )}
+
+          {!currentPlaylist
+            ?.tracks
+            ?.length && (
+
+            <div className="empty-playlist">
+              No songs found in this
+              playlist.
             </div>
 
-            {/* =================================================
-                SONG HEADER
-            ================================================= */}
+          )}
 
-            <div className="modal-song-heading">
-              <span>
-                {currentPlaylist?.name ||
-                  "Songs"}
-              </span>
-
-              <small>
-                {currentPlaylist?.tracks
-                  ?.length || 0}{" "}
-                songs
-              </small>
-            </div>
-
-            {/* =================================================
-                SONG SCROLLER
-            ================================================= */}
-
-            <div className="modal-song-list">
-              {currentPlaylist?.tracks?.map(
-                (
-                  item,
-                  index
-                ) => (
-                  <button
-                    type="button"
-                    key={
-                      item.file ||
-                      `${item.title}-${index}`
-                    }
-                    className={`modal-track ${item.file && song?.file === item.file
-                      ? "active"
-                      : ""
-                      }`}
-                    onClick={() => {
-                      changeSong(
-                        index,
-                        true
-                      );
-
-                      setShowPlaylist(
-                        false
-                      );
-                    }}
-                  >
-                    <span className="track-number">
-                      {String(
-                        index + 1
-                      ).padStart(
-                        2,
-                        "0"
-                      )}
-                    </span>
-
-                    <span className="track-details">
-                      <strong>
-                        {item.title ||
-                          "Unknown title"}
-                      </strong>
-
-                      <small>
-                        {item.artist ||
-                          "Unknown artist"}
-                      </small>
-
-                      {item.album && (
-                        <em>
-                          {item.album}
-                        </em>
-                      )}
-                    </span>
-
-                    <span className="track-action">
-                      {item.file &&
-                        song?.file === item.file &&
-                        playing ? (
-                        <span className="bars">
-                          <i />
-                          <i />
-                          <i />
-                        </span>
-                      ) : (
-                        <Play size={15} />
-                      )}
-                    </span>
-                  </button>
-                )
-              )}
-
-              {!currentPlaylist?.tracks
-                ?.length && (
-                  <div className="empty-playlist">
-                    No songs found in this
-                    playlist.
-                  </div>
-                )}
-            </div>
-          </div>
         </div>
-      )}
 
-      {/* =================================================
-          FOOTER
-      ================================================= */}
+      </div>
 
-      <footer>
-        <span>
-          COFFEE · CODE · MUSIC
-        </span>
+    </div>
+  )}
 
-        <span>
-          SESSION 01 · 2026
-        </span>
-      </footer>
-    </main>
-  );
+  {/* =================================================
+      FOOTER
+  ================================================= */}
+
+  <footer>
+
+    <span>
+      COFFEE · CODE · MUSIC
+    </span>
+
+    <span>
+      SESSION 01 · 2026
+    </span>
+
+  </footer>
+
+</main>
+
+
+);
 }

@@ -88,7 +88,8 @@ async function listFolder(prefix = "") {
       },
     }),
 
-    // unstable_cache handles application-level caching.
+    // Do not let Next.js cache the Supabase listing itself.
+    // unstable_cache below handles application-level caching.
     cache: "no-store",
   });
 
@@ -107,12 +108,9 @@ async function listFolder(prefix = "") {
 // =========================================================
 // BUILD TRACK
 //
-// IMPORTANT:
-// We DO NOT download the MP3 here.
+// NO AUDIO FILE IS DOWNLOADED HERE.
 //
-// The old implementation downloaded the entire audio file
-// simply to read ID3 metadata. That is the main reason the
-// playlist took so long to appear.
+// Metadata is loaded later when the user plays the song.
 // =========================================================
 
 function buildTrack(
@@ -130,6 +128,8 @@ function buildTrack(
 
     file: url,
 
+    // Initial fallback values.
+    // These get replaced after the song is played.
     title:
       fallbackTitle(item.name),
 
@@ -157,6 +157,10 @@ function buildTrack(
     composer:
       "",
 
+    // Artwork is initially absent.
+    picture:
+      null,
+
     filename:
       item.name,
   };
@@ -167,13 +171,8 @@ function buildTrack(
 //
 // Cached for 5 minutes.
 //
-// This means:
-// First request:
-//   Supabase → build library → cache
-//
-// Next requests:
-//   cache → immediately return library
-//
+// IMPORTANT:
+// This function NEVER downloads an audio file.
 // =========================================================
 
 const getMusicLibrary =
@@ -248,7 +247,7 @@ const getMusicLibrary =
                 // ------------------------------------------------
                 // BUILD TRACK OBJECTS
                 //
-                // NO AUDIO DOWNLOADS HERE
+                // NO AUDIO DOWNLOADS
                 // ------------------------------------------------
 
                 const tracks =
@@ -336,7 +335,7 @@ const getMusicLibrary =
     },
 
     // Cache key
-    ["music-library-v1"],
+    ["music-library-v2"],
 
     // Cache configuration
     {
@@ -376,7 +375,6 @@ export async function GET() {
 
         headers: {
 
-          // CDN / browser caching
           "Cache-Control":
             "public, s-maxage=300, stale-while-revalidate=600",
         },
