@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -24,58 +25,32 @@ import {
   X,
 } from "lucide-react";
 
-/*
-
-* music-metadata runs in the browser.
-*
-* IMPORTANT:
-* This is intentionally imported here rather than in an
-* API route because metadata is extracted at runtime by
-* the user's browser.
-  */
-import {
-  parseBlob,
-} from "music-metadata";
+import { parseBlob } from "music-metadata";
 
 /* =========================================================
-CONFIG
+   CONFIG
 ========================================================= */
 
-const METADATA_INITIAL_BYTES =
-  256 * 1024;
-
-const METADATA_MAX_BYTES =
-  1024 * 1024;
+const METADATA_INITIAL_BYTES = 256 * 1024;
+const METADATA_MAX_BYTES = 1024 * 1024;
 
 /* =========================================================
-HELPERS
+   HELPERS
 ========================================================= */
 
 function formatTime(seconds) {
-  if (
-    !Number.isFinite(seconds) ||
-    seconds < 0
-  ) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
     return "0:00";
   }
 
-  const minutes =
-    Math.floor(
-      seconds / 60
-    );
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
 
-  const remaining =
-    Math.floor(
-      seconds % 60
-    );
-
-  return `${minutes}:${remaining
-    .toString()
-    .padStart(2, "0")}`;
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
 
 /* =========================================================
-OFFICE SOUND TEXT
+   OFFICE SOUND TEXT
 ========================================================= */
 
 const officeLines = [
@@ -92,13 +67,66 @@ const officeLines = [
 ];
 
 /* =========================================================
-METADATA HELPERS
+   TERMINAL LOOP
+========================================================= */
+
+const terminalCommands = [
+  {
+    command: "whoami",
+    output: "software_developer",
+  },
+  {
+    command: "status",
+    output: "building something good...",
+  },
+  {
+    command: "git status",
+    output: "working tree clean",
+  },
+  {
+    command: "npm run dev",
+    output: "ready - started server on localhost:3000",
+  },
+  {
+    command: "git pull",
+    output: "Already up to date.",
+  },
+  {
+    command: "npm run build",
+    output: "compiled successfully",
+  },
+  {
+    command: "docker ps",
+    output: "3 containers running",
+  },
+  {
+    command: "git push",
+    output: "Everything up-to-date",
+  },
+  {
+    command: "deploy --production",
+    output: "deployment successful",
+  },
+  {
+    command: "coffee --status",
+    output: "coffee level: 87%",
+  },
+  {
+    command: "fix production",
+    output: "production fixed. probably.",
+  },
+  {
+    command: "git commit",
+    output: "one more fix committed",
+  },
+];
+
+/* =========================================================
+   METADATA HELPERS
 ========================================================= */
 
 function firstValue(value) {
-  if (
-    Array.isArray(value)
-  ) {
+  if (Array.isArray(value)) {
     return value[0];
   }
 
@@ -106,220 +134,106 @@ function firstValue(value) {
 }
 
 /* =========================================================
-PICTURE → DATA URL
+   PICTURE → DATA URL
 ========================================================= */
 
-function pictureToDataUrl(
-  picture
-) {
-  if (
-    !picture?.data ||
-    !picture?.format
-  ) {
+function pictureToDataUrl(picture) {
+  if (!picture?.data || !picture?.format) {
     return null;
   }
 
   try {
     const bytes =
-      picture.data instanceof
-        Uint8Array
+      picture.data instanceof Uint8Array
         ? picture.data
-        : new Uint8Array(
-          picture.data
-        );
-
+        : new Uint8Array(picture.data);
 
     let binary = "";
 
-    const chunkSize =
-      0x8000;
+    const chunkSize = 0x8000;
 
-    for (
-      let i = 0;
-      i < bytes.length;
-      i += chunkSize
-    ) {
+    for (let i = 0; i < bytes.length; i += chunkSize) {
       binary += String.fromCharCode(
-        ...bytes.subarray(
-          i,
-          i + chunkSize
-        )
+        ...bytes.subarray(i, i + chunkSize)
       );
     }
 
-    return `data:${picture.format};base64,${btoa(
-      binary
-    )}`;
-
-
+    return `data:${picture.format};base64,${btoa(binary)}`;
   } catch (error) {
-    console.warn(
-      "Unable to convert artwork:",
-      error
-    );
-
-
+    console.warn("Unable to convert artwork:", error);
     return null;
-
-
   }
 }
 
 /* =========================================================
-NORMALIZE METADATA
+   NORMALIZE METADATA
 ========================================================= */
 
-function normalizeMetadata(
-  metadata
-) {
-  const common =
-    metadata?.common || {};
-
-  const picture =
-    common.picture?.[0];
+function normalizeMetadata(metadata) {
+  const common = metadata?.common || {};
+  const picture = common.picture?.[0];
 
   return {
-    title:
-      common.title ||
-      "",
+    title: common.title || "",
 
+    artist: firstValue(common.artist) || "",
 
-    artist:
-      firstValue(
-        common.artist
-      ) || "",
+    album: common.album || "",
 
-    album:
-      common.album ||
-      "",
+    albumArtist: firstValue(common.albumartist) || "",
 
-    albumArtist:
-      firstValue(
-        common.albumartist
-      ) || "",
+    year: common.year ?? null,
 
-    year:
-      common.year ??
-      null,
+    genre: firstValue(common.genre) || "",
 
-    genre:
-      firstValue(
-        common.genre
-      ) || "",
+    track: common.track?.no ?? null,
 
-    track:
-      common.track?.no ??
-      null,
+    disk: common.disk?.no ?? null,
 
-    disk:
-      common.disk?.no ??
-      null,
+    composer: firstValue(common.composer) || "",
 
-    composer:
-      firstValue(
-        common.composer
-      ) || "",
-
-    picture:
-      picture
-        ? pictureToDataUrl(
-          picture
-        )
-        : null,
-
-
+    picture: picture ? pictureToDataUrl(picture) : null,
   };
 }
 
 /* =========================================================
-COMPONENT
+   COMPONENT
 ========================================================= */
 
 export default function Home() {
   /* =======================================================
-  REFS
+     REFS
   ======================================================= */
 
-  const audioRef =
-    useRef(null);
+  const audioRef = useRef(null);
+  const keyboardRef = useRef(null);
 
-  const keyboardRef =
-    useRef(null);
+  const metadataCacheRef = useRef(new Map());
+  const metadataRequestsRef = useRef(new Map());
 
-  /*
-  
-  * Metadata lives ONLY in browser memory.
-  *
-  * No database.
-  * No local file.
-  * No Supabase table.
-    */
+  const resumeAfterTrackChangeRef = useRef(false);
 
-  const metadataCacheRef =
-    useRef(
-      new Map()
-    );
-
-  /*
-  
-  * Prevent duplicate requests.
-    */
-
-  const metadataRequestsRef =
-    useRef(
-      new Map()
-    );
-
-  /*
-  
-  * Used when changing songs.
-    */
-
-  const resumeAfterTrackChangeRef =
-    useRef(false);
-
-  /*
-  
-  * Keeps current song accessible to
-  * callbacks without stale closures.
-    */
-
-  const currentSongRef =
-    useRef(null);
-
-  /*
-  
-  * Keeps current playlist accessible
-  * to audio ended callback.
-    */
-
-  const currentPlaylistRef =
-    useRef(null);
+  const currentSongRef = useRef(null);
+  const currentPlaylistRef = useRef(null);
 
   /* =======================================================
-  WALLPAPER
+     WALLPAPER
   ======================================================= */
 
-  const [wallpaper, setWallpaper] =
-    useState(
-      "/wallpaper.jpg"
-    );
+  const [wallpaper, setWallpaper] = useState("/wallpaper.jpg");
 
   /* =======================================================
-  MUSIC
+     MUSIC
   ======================================================= */
 
-  const [playlists, setPlaylists] =
-    useState([]);
+  const [playlists, setPlaylists] = useState([]);
+  const [totalTracks, setTotalTracks] = useState(0);
 
-  const [loadingMusic, setLoadingMusic] =
-    useState(true);
-
-  const [musicError, setMusicError] =
-    useState("");
+  const [loadingMusic, setLoadingMusic] = useState(true);
+  const [musicError, setMusicError] = useState("");
 
   /* =======================================================
-  PLAYLIST NAVIGATION
+     PLAYLIST NAVIGATION
   ======================================================= */
 
   const [
@@ -327,125 +241,111 @@ export default function Home() {
     setSelectedPlaylistId,
   ] = useState("");
 
-  /*
-  
-  * Index inside the playlist being viewed.
-  *
-  * This is deliberately separate from the
-  * actual currently playing song.
-    */
-
-  const [current, setCurrent] =
-    useState(0);
+  const [current, setCurrent] = useState(0);
 
   /* =======================================================
-  CURRENT SONG
+     CURRENT SONG
   ======================================================= */
 
-  const [currentSong, setCurrentSong] =
-    useState(null);
+  const [currentSong, setCurrentSong] = useState(null);
 
   /* =======================================================
-  PLAYER
+     PLAYER
   ======================================================= */
 
-  const [playing, setPlaying] =
-    useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  const [progress, setProgress] =
-    useState(0);
-
-  const [duration, setDuration] =
-    useState(0);
-
-  const [volume, setVolume] =
-    useState(0.82);
-
-  const [muted, setMuted] =
-    useState(false);
+  const [volume, setVolume] = useState(0.82);
+  const [muted, setMuted] = useState(false);
 
   /* =======================================================
-  UI
+     UI
   ======================================================= */
 
-  const [showPlaylist, setShowPlaylist] =
-    useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
 
   /* =======================================================
-  OFFICE
+     OFFICE
   ======================================================= */
 
-  const [keyboardOn, setKeyboardOn] =
-    useState(false);
-
-  const [activeKeys, setActiveKeys] =
-    useState([]);
-
-  const [officeText, setOfficeText] =
-    useState("ready.");
+  const [keyboardOn, setKeyboardOn] = useState(false);
+  const [activeKeys, setActiveKeys] = useState([]);
+  const [officeText, setOfficeText] = useState("ready.");
 
   /* =======================================================
-  CURRENT PLAYLIST
+     TERMINAL
   ======================================================= */
 
-  const currentPlaylist =
-    useMemo(() => {
-      if (
-        !playlists.length
-      ) {
-        return null;
-      }
-
-
-      return (
-        playlists.find(
-          (playlist) =>
-            playlist.id ===
-            selectedPlaylistId
-        ) ||
-        playlists[0]
-      );
-    }, [
-      playlists,
-      selectedPlaylistId,
-    ]);
-
+  const [terminalIndex, setTerminalIndex] = useState(0);
 
   /* =======================================================
-  KEEP REFS UPDATED
+     CURRENT PLAYLIST
+  ======================================================= */
+
+  const currentPlaylist = useMemo(() => {
+    if (!playlists.length) {
+      return null;
+    }
+
+    return (
+      playlists.find(
+        (playlist) => playlist.id === selectedPlaylistId
+      ) || playlists[0]
+    );
+  }, [playlists, selectedPlaylistId]);
+
+  /* =======================================================
+     KEEP REFS UPDATED
   ======================================================= */
 
   useEffect(() => {
-    currentSongRef.current =
-      currentSong;
+    currentSongRef.current = currentSong;
   }, [currentSong]);
 
   useEffect(() => {
-    currentPlaylistRef.current =
-      currentPlaylist;
+    currentPlaylistRef.current = currentPlaylist;
   }, [currentPlaylist]);
 
   /* =======================================================
-  LOAD MUSIC
+     TERMINAL LOOP
+     
+     This continuously changes commands and output.
+     It does NOT depend on keyboard sounds.
+     It does NOT stop.
+  ======================================================= */
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTerminalIndex((previous) => {
+        return (previous + 1) % terminalCommands.length;
+      });
+    }, 2600);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  const terminalCommand =
+    terminalCommands[terminalIndex];
+
+  /* =======================================================
+     LOAD MUSIC
   ======================================================= */
 
   useEffect(() => {
     let cancelled = false;
-
 
     async function loadMusic() {
       try {
         setLoadingMusic(true);
         setMusicError("");
 
-        const response =
-          await fetch(
-            "/api/music",
-            {
-              cache:
-                "no-store",
-            }
-          );
+        const response = await fetch("/api/music", {
+          cache: "no-store",
+        });
 
         if (!response.ok) {
           throw new Error(
@@ -453,44 +353,50 @@ export default function Home() {
           );
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
         if (cancelled) {
           return;
         }
 
-        const loadedPlaylists =
-          Array.isArray(
-            data.playlists
-          )
-            ? data.playlists
-            : [];
+        const loadedPlaylists = Array.isArray(data.playlists)
+          ? data.playlists
+          : [];
 
-        setPlaylists(
-          loadedPlaylists
+        /*
+         * IMPORTANT:
+         *
+         * Use totalTracks returned by the API.
+         * Do not calculate the hero count from
+         * currentPlaylist.
+         */
+
+        const apiTotalTracks = Number(data.totalTracks);
+
+        const calculatedTotalTracks =
+          loadedPlaylists.reduce(
+            (total, playlist) =>
+              total + (playlist.tracks?.length || 0),
+            0
+          );
+
+        setTotalTracks(
+          Number.isFinite(apiTotalTracks) && apiTotalTracks >= 0
+            ? apiTotalTracks
+            : calculatedTotalTracks
         );
 
-        if (
-          loadedPlaylists.length
-        ) {
-          const firstPlaylist =
-            loadedPlaylists[0];
+        setPlaylists(loadedPlaylists);
+
+        if (loadedPlaylists.length > 0) {
+          const firstPlaylist = loadedPlaylists[0];
 
           const firstSong =
-            firstPlaylist
-              .tracks?.[0] ||
-            null;
+            firstPlaylist.tracks?.[0] || null;
 
-          setSelectedPlaylistId(
-            firstPlaylist.id
-          );
-
+          setSelectedPlaylistId(firstPlaylist.id);
           setCurrent(0);
-
-          setCurrentSong(
-            firstSong
-          );
+          setCurrentSong(firstSong);
         }
       } catch (error) {
         console.error(
@@ -505,9 +411,7 @@ export default function Home() {
         }
       } finally {
         if (!cancelled) {
-          setLoadingMusic(
-            false
-          );
+          setLoadingMusic(false);
         }
       }
     }
@@ -517,44 +421,29 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-
-
   }, []);
 
   /* =======================================================
-  VOLUME
+     VOLUME
   ======================================================= */
 
   useEffect(() => {
-    const audio =
-      audioRef.current;
-
+    const audio = audioRef.current;
 
     if (!audio) {
       return;
     }
 
-    audio.volume =
-      muted
-        ? 0
-        : volume;
-
+    audio.volume = muted ? 0 : volume;
     audio.muted = false;
-
-
-  }, [
-    volume,
-    muted,
-  ]);
+  }, [volume, muted]);
 
   /* =======================================================
-  OFFICE SOUND
+     OFFICE SOUND
   ======================================================= */
 
   useEffect(() => {
-    const keyboard =
-      keyboardRef.current;
-
+    const keyboard = keyboardRef.current;
 
     if (!keyboard) {
       return;
@@ -564,16 +453,12 @@ export default function Home() {
     keyboard.loop = true;
 
     if (keyboardOn) {
-      keyboard
-        .play()
-        .catch(
-          (error) => {
-            console.warn(
-              "Office ambience could not start:",
-              error
-            );
-          }
+      keyboard.play().catch((error) => {
+        console.warn(
+          "Office ambience could not start:",
+          error
         );
+      });
     } else {
       keyboard.pause();
 
@@ -583,22 +468,16 @@ export default function Home() {
         // Ignore.
       }
     }
-
-
   }, [keyboardOn]);
 
   /* =======================================================
-  OFFICE ANIMATION
+     OFFICE VISUAL ANIMATION
   ======================================================= */
 
   useEffect(() => {
     if (!keyboardOn) {
       setActiveKeys([]);
-      setOfficeText(
-        "ready."
-      );
-
-
+      setOfficeText("ready.");
       return;
     }
 
@@ -621,369 +500,203 @@ export default function Home() {
 
     const cycle = () => {
       const selected =
-        chars[
-        Math.floor(
-          Math.random() *
-          chars.length
-        )
-        ];
+        chars[Math.floor(Math.random() * chars.length)];
 
       const line =
         officeLines[
-        Math.floor(
-          Math.random() *
-          officeLines.length
-        )
+          Math.floor(Math.random() * officeLines.length)
         ];
 
-      setActiveKeys([
-        selected,
-      ]);
-
+      setActiveKeys([selected]);
       setOfficeText(line);
 
-      timeout =
-        setTimeout(
-          () => {
-            setActiveKeys([]);
+      timeout = setTimeout(() => {
+        setActiveKeys([]);
 
-            timeout =
-              setTimeout(
-                cycle,
-                120 +
-                Math.random() *
-                800
-              );
-          },
-          55 +
-          Math.random() *
-          130
+        timeout = setTimeout(
+          cycle,
+          120 + Math.random() * 800
         );
+      }, 55 + Math.random() * 130);
     };
 
     cycle();
 
     return () => {
-      clearTimeout(
-        timeout
-      );
+      clearTimeout(timeout);
     };
-
-
   }, [keyboardOn]);
 
   /* =======================================================
-  METADATA REQUEST
-  
-  
-   IMPORTANT:
-   
-   This happens in the browser.
-   
-   The audio does NOT wait for this.
-  
-  
+     METADATA
   ======================================================= */
 
-  const loadMetadata =
-    useCallback(
-      async (track) => {
-        if (
-          !track?.id ||
-          !track?.file
-        ) {
-          return null;
-        }
+  const loadMetadata = useCallback(
+    async (track) => {
+      if (!track?.id || !track?.file) {
+        return null;
+      }
 
+      const cached =
+        metadataCacheRef.current.get(track.id);
 
-        /*
-         * Already cached.
-         */
+      if (cached) {
+        return cached;
+      }
 
-        const cached =
-          metadataCacheRef.current.get(
-            track.id
-          );
+      const existingRequest =
+        metadataRequestsRef.current.get(track.id);
 
-        if (cached) {
-          return cached;
-        }
+      if (existingRequest) {
+        return existingRequest;
+      }
 
-        /*
-         * Already loading.
-         */
+      const request = (async () => {
+        try {
+          let response = await fetch(track.file, {
+            headers: {
+              Range: `bytes=0-${METADATA_INITIAL_BYTES - 1}`,
+            },
+            cache: "force-cache",
+          });
 
-        const existingRequest =
-          metadataRequestsRef.current.get(
-            track.id
-          );
+          if (!response.ok) {
+            throw new Error(
+              `Metadata range request failed: ${response.status}`
+            );
+          }
 
-        if (existingRequest) {
-          return existingRequest;
-        }
+          const blob = await response.blob();
 
-        const request =
-          (async () => {
-            try {
-              /*
-               * -------------------------------------------------
-               * STEP 1
-               *
-               * Fetch only the beginning of the audio.
-               * This is where ID3v2 metadata normally lives
-               * for MP3 files.
-               * -------------------------------------------------
-               */
+          let parsed;
 
-              let response =
-                await fetch(
-                  track.file,
-                  {
-                    headers: {
-                      Range: `bytes=0-${METADATA_INITIAL_BYTES - 1}`,
-                    },
-                    cache:
-                      "force-cache",
-                  }
-                );
+          try {
+            parsed = await parseBlob(blob, {
+              duration: false,
+            });
+          } catch {
+            response = await fetch(track.file, {
+              headers: {
+                Range: `bytes=0-${METADATA_MAX_BYTES - 1}`,
+              },
+              cache: "force-cache",
+            });
 
-              if (
-                !response.ok
-              ) {
-                throw new Error(
-                  `Metadata range request failed: ${response.status}`
-                );
-              }
-
-              /*
-               * If the server ignores Range and returns
-               * the whole file, don't download more.
-               *
-               * We can still parse it, but this is not
-               * expected with Supabase Storage.
-               */
-
-              const blob =
-                await response.blob();
-
-              /*
-               * -------------------------------------------------
-               * STEP 2
-               *
-               * Parse the partial file.
-               * -------------------------------------------------
-               */
-
-              let parsed;
-
-              try {
-                parsed =
-                  await parseBlob(
-                    blob,
-                    {
-                      duration:
-                        false,
-                    }
-                  );
-              } catch {
-                /*
-                 * Some formats such as M4A may keep their
-                 * metadata later in the file.
-                 *
-                 * Retry with a larger range.
-                 */
-
-                response =
-                  await fetch(
-                    track.file,
-                    {
-                      headers: {
-                        Range: `bytes=0-${METADATA_MAX_BYTES - 1}`,
-                      },
-                      cache:
-                        "force-cache",
-                    }
-                  );
-
-                if (
-                  !response.ok
-                ) {
-                  throw new Error(
-                    `Metadata retry failed: ${response.status}`
-                  );
-                }
-
-                const largerBlob =
-                  await response.blob();
-
-                parsed =
-                  await parseBlob(
-                    largerBlob,
-                    {
-                      duration:
-                        false,
-                    }
-                  );
-              }
-
-              const metadata =
-                normalizeMetadata(
-                  parsed
-                );
-
-              /*
-               * Don't overwrite useful fallback data
-               * with empty metadata.
-               */
-
-              if (
-                !metadata.title &&
-                !metadata.artist &&
-                !metadata.album
-              ) {
-                return null;
-              }
-
-              /*
-               * Cache only in browser memory.
-               */
-
-              metadataCacheRef.current.set(
-                track.id,
-                metadata
-              );
-
-              /*
-               * Update the current song if it is
-               * still the same song.
-               */
-
-              setCurrentSong(
-                (currentTrack) => {
-                  if (
-                    !currentTrack ||
-                    currentTrack.id !==
-                    track.id
-                  ) {
-                    return currentTrack;
-                  }
-
-                  return {
-                    ...currentTrack,
-                    ...metadata,
-                  };
-                }
-              );
-
-              /*
-               * Also update the copy inside playlists.
-               */
-
-              setPlaylists(
-                (previous) =>
-                  previous.map(
-                    (
-                      playlist
-                    ) => ({
-                      ...playlist,
-
-                      tracks:
-                        playlist.tracks?.map(
-                          (
-                            item
-                          ) =>
-                            item.id ===
-                              track.id
-                              ? {
-                                ...item,
-                                ...metadata,
-                              }
-                              : item
-                        ),
-                    })
-                  )
-              );
-
-              return metadata;
-            } catch (error) {
-              console.warn(
-                "Metadata could not be loaded:",
-                track.file,
-                error
-              );
-
-              return null;
-            } finally {
-              metadataRequestsRef.current.delete(
-                track.id
+            if (!response.ok) {
+              throw new Error(
+                `Metadata retry failed: ${response.status}`
               );
             }
-          })();
 
-        metadataRequestsRef.current.set(
-          track.id,
-          request
-        );
+            const largerBlob =
+              await response.blob();
 
-        return request;
-      },
-      []
-    );
+            parsed = await parseBlob(largerBlob, {
+              duration: false,
+            });
+          }
 
+          const metadata =
+            normalizeMetadata(parsed);
+
+          if (
+            !metadata.title &&
+            !metadata.artist &&
+            !metadata.album
+          ) {
+            return null;
+          }
+
+          metadataCacheRef.current.set(
+            track.id,
+            metadata
+          );
+
+          setCurrentSong((currentTrack) => {
+            if (
+              !currentTrack ||
+              currentTrack.id !== track.id
+            ) {
+              return currentTrack;
+            }
+
+            return {
+              ...currentTrack,
+              ...metadata,
+            };
+          });
+
+          setPlaylists((previous) =>
+            previous.map((playlist) => ({
+              ...playlist,
+              tracks: playlist.tracks?.map(
+                (item) =>
+                  item.id === track.id
+                    ? {
+                        ...item,
+                        ...metadata,
+                      }
+                    : item
+              ),
+            }))
+          );
+
+          return metadata;
+        } catch (error) {
+          console.warn(
+            "Metadata could not be loaded:",
+            track.file,
+            error
+          );
+
+          return null;
+        } finally {
+          metadataRequestsRef.current.delete(
+            track.id
+          );
+        }
+      })();
+
+      metadataRequestsRef.current.set(
+        track.id,
+        request
+      );
+
+      return request;
+    },
+    []
+  );
 
   /* =======================================================
-  PRELOAD TRACK METADATA
+     PRELOAD METADATA
   ======================================================= */
 
-  const preloadTrack =
-    useCallback(
-      (track) => {
-        if (!track) {
-          return;
-        }
+  const preloadTrack = useCallback(
+    (track) => {
+      if (!track) {
+        return;
+      }
 
-
-        /*
-         * Fire and forget.
-         *
-         * This never blocks playback.
-         */
-
-        loadMetadata(
-          track
-        ).catch(() => { });
-      },
-      [loadMetadata]
-    );
-
+      loadMetadata(track).catch(() => {});
+    },
+    [loadMetadata]
+  );
 
   /* =======================================================
-  PRELOAD NEXT TRACK
-  
-  
-   While Song A plays:
-   
-     Song A → playing
-     Song B → metadata preloading
-  
-  
+     PRELOAD NEXT / PREVIOUS
   ======================================================= */
 
   useEffect(() => {
     if (
       !currentSong ||
-      !currentPlaylist?.tracks
-        ?.length
+      !currentPlaylist?.tracks?.length
     ) {
       return;
     }
 
-
     const index =
       currentPlaylist.tracks.findIndex(
-        (item) =>
-          item.id ===
-          currentSong.id
+        (item) => item.id === currentSong.id
       );
 
     if (index < 0) {
@@ -992,34 +705,20 @@ export default function Home() {
 
     const nextIndex =
       (index + 1) %
-      currentPlaylist.tracks
-        .length;
+      currentPlaylist.tracks.length;
 
     const previousIndex =
-      (index -
-        1 +
-        currentPlaylist.tracks
-          .length) %
-      currentPlaylist.tracks
-        .length;
-
-    /*
-     * Preload next and previous metadata.
-     */
+      (index - 1 +
+        currentPlaylist.tracks.length) %
+      currentPlaylist.tracks.length;
 
     preloadTrack(
-      currentPlaylist.tracks[
-      nextIndex
-      ]
+      currentPlaylist.tracks[nextIndex]
     );
 
     preloadTrack(
-      currentPlaylist.tracks[
-      previousIndex
-      ]
+      currentPlaylist.tracks[previousIndex]
     );
-
-
   }, [
     currentSong,
     currentPlaylist,
@@ -1027,284 +726,170 @@ export default function Home() {
   ]);
 
   /* =======================================================
-  CHANGE SONG
+     CHANGE SONG
   ======================================================= */
 
-  const changeSong =
-    useCallback(
-      (
-        index,
-        autoPlay = true
-      ) => {
-        const playlist =
-          currentPlaylistRef.current;
-
-
-        if (
-          !playlist?.tracks
-            ?.length
-        ) {
-          return;
-        }
-
-        if (
-          index < 0 ||
-          index >=
-          playlist.tracks
-            .length
-        ) {
-          return;
-        }
-
-        const nextSong =
-          playlist.tracks[
-          index
-          ];
-
-        /*
-         * Tell the source-change effect
-         * to automatically play.
-         */
-
-        resumeAfterTrackChangeRef.current =
-          Boolean(
-            autoPlay
-          );
-
-        /*
-         * Stop current audio.
-         */
-
-        const audio =
-          audioRef.current;
-
-        if (audio) {
-          audio.pause();
-
-          try {
-            audio.currentTime = 0;
-          } catch {
-            // Ignore.
-          }
-        }
-
-        /*
-         * Update state.
-         */
-
-        setCurrent(index);
-
-        setCurrentSong(
-          nextSong
-        );
-
-        setProgress(0);
-
-        setDuration(0);
-
-        setPlaying(false);
-
-        /*
-         * Start metadata loading immediately.
-         *
-         * Playback does NOT wait.
-         */
-
-        preloadTrack(
-          nextSong
-        );
-      },
-      [preloadTrack]
-    );
-
-
-  /* =======================================================
-  CHANGE PLAYLIST
-  
-  
-   IMPORTANT:
-   
-   This changes ONLY the playlist displayed.
-   
-   It does NOT change:
-   
-     currentSong
-     audio.src
-     progress
-     duration
-     playing
-  
-  
-  ======================================================= */
-
-  const changePlaylist =
-    useCallback(
-      (playlistId) => {
-        const playlist =
-          playlists.find(
-            (item) =>
-              item.id ===
-              playlistId
-          );
-
-
-        if (!playlist) {
-          return;
-        }
-
-        setSelectedPlaylistId(
-          playlistId
-        );
-      },
-      [playlists]
-    );
-
-
-  /* =======================================================
-  NEXT
-  ======================================================= */
-
-  const next =
-    useCallback(() => {
+  const changeSong = useCallback(
+    (index, autoPlay = true) => {
       const playlist =
         currentPlaylistRef.current;
 
-
-      const song =
-        currentSongRef.current;
+      if (!playlist?.tracks?.length) {
+        return;
+      }
 
       if (
-        !playlist?.tracks
-          ?.length
+        index < 0 ||
+        index >= playlist.tracks.length
       ) {
         return;
       }
 
-      /*
-       * Find the currently playing song
-       * by ID rather than relying on `current`.
-       *
-       * This is important because the user can
-       * switch playlist tabs while another song
-       * is playing.
-       */
-
-      const playingIndex =
-        playlist.tracks.findIndex(
-          (item) =>
-            item.id ===
-            song?.id
-        );
+      const nextSong =
+        playlist.tracks[index];
 
       /*
-       * If the current song isn't in the displayed
-       * playlist, start from the first track.
+       * Tell the audio source effect
+       * to automatically start playback.
        */
 
-      const nextIndex =
-        playingIndex >= 0
-          ? (playingIndex + 1) %
-          playlist.tracks
-            .length
-          : 0;
-
-      changeSong(
-        nextIndex,
-        true
-      );
-    }, [changeSong]);
-
-
-  /* =======================================================
-  PREVIOUS
-  ======================================================= */
-
-  const previous =
-    useCallback(() => {
-      const playlist =
-        currentPlaylistRef.current;
-
-
-      const song =
-        currentSongRef.current;
-
-      if (
-        !playlist?.tracks
-          ?.length
-      ) {
-        return;
-      }
+      resumeAfterTrackChangeRef.current =
+        Boolean(autoPlay);
 
       const audio =
         audioRef.current;
 
-      /*
-       * More than 3 seconds:
-       * restart current song.
-       */
+      if (audio) {
+        audio.pause();
 
-      if (
-        audio &&
-        audio.currentTime > 3
-      ) {
-        audio.currentTime = 0;
+        try {
+          audio.currentTime = 0;
+        } catch {
+          // Ignore.
+        }
+      }
 
-        setProgress(0);
+      setCurrent(index);
+      setCurrentSong(nextSong);
+      setProgress(0);
+      setDuration(0);
+      setPlaying(false);
 
+      preloadTrack(nextSong);
+    },
+    [preloadTrack]
+  );
+
+  /* =======================================================
+     CHANGE PLAYLIST
+     
+     This ONLY changes the playlist being viewed.
+     It never changes the current song.
+  ======================================================= */
+
+  const changePlaylist = useCallback(
+    (playlistId) => {
+      const playlist =
+        playlists.find(
+          (item) => item.id === playlistId
+        );
+
+      if (!playlist) {
         return;
       }
 
-      const playingIndex =
-        playlist.tracks.findIndex(
-          (item) =>
-            item.id ===
-            song?.id
-        );
-
-      const safeIndex =
-        playingIndex >= 0
-          ? playingIndex
-          : 0;
-
-      const previousIndex =
-        (
-          safeIndex -
-          1 +
-          playlist.tracks
-            .length
-        ) %
-        playlist.tracks
-          .length;
-
-      changeSong(
-        previousIndex,
-        true
-      );
-    }, [changeSong]);
-
+      setSelectedPlaylistId(playlistId);
+    },
+    [playlists]
+  );
 
   /* =======================================================
-  CHANGE AUDIO SOURCE
-  
-  
-   THIS IS THE IMPORTANT NEXT/PREVIOUS FIX.
-   
-   React changes:
-   
-     <audio src={song.file}>
-   
-   Then we wait one animation frame and call play().
-   
-   This avoids the race condition that caused the
-   user to press Play manually after Next.
-  
-  
+     NEXT
+  ======================================================= */
+
+  const next = useCallback(() => {
+    const playlist =
+      currentPlaylistRef.current;
+
+    const song =
+      currentSongRef.current;
+
+    if (!playlist?.tracks?.length) {
+      return;
+    }
+
+    const playingIndex =
+      playlist.tracks.findIndex(
+        (item) => item.id === song?.id
+      );
+
+    const nextIndex =
+      playingIndex >= 0
+        ? (playingIndex + 1) %
+          playlist.tracks.length
+        : 0;
+
+    changeSong(nextIndex, true);
+  }, [changeSong]);
+
+  /* =======================================================
+     PREVIOUS
+  ======================================================= */
+
+  const previous = useCallback(() => {
+    const playlist =
+      currentPlaylistRef.current;
+
+    const song =
+      currentSongRef.current;
+
+    if (!playlist?.tracks?.length) {
+      return;
+    }
+
+    const audio =
+      audioRef.current;
+
+    if (
+      audio &&
+      audio.currentTime > 3
+    ) {
+      audio.currentTime = 0;
+      setProgress(0);
+      return;
+    }
+
+    const playingIndex =
+      playlist.tracks.findIndex(
+        (item) => item.id === song?.id
+      );
+
+    const safeIndex =
+      playingIndex >= 0
+        ? playingIndex
+        : 0;
+
+    const previousIndex =
+      (safeIndex -
+        1 +
+        playlist.tracks.length) %
+      playlist.tracks.length;
+
+    changeSong(
+      previousIndex,
+      true
+    );
+  }, [changeSong]);
+
+  /* =======================================================
+     CHANGE AUDIO SOURCE
+     
+     Automatically plays the newly selected song.
   ======================================================= */
 
   useEffect(() => {
     const audio =
       audioRef.current;
-
 
     if (
       !audio ||
@@ -1315,214 +900,164 @@ export default function Home() {
 
     let cancelled = false;
 
-    const updateSource =
-      async () => {
+    const updateSource = async () => {
+      await new Promise((resolve) =>
+        requestAnimationFrame(resolve)
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      if (
+        !resumeAfterTrackChangeRef.current
+      ) {
+        return;
+      }
+
+      resumeAfterTrackChangeRef.current =
+        false;
+
+      try {
         /*
-         * Wait for React to apply the new src.
+         * Explicitly reload the new source.
+         *
+         * This makes Next / Previous reliable
+         * even when React reuses the audio element.
          */
 
-        await new Promise(
-          (resolve) =>
-            requestAnimationFrame(
-              resolve
-            )
+        audio.load();
+
+        await audio.play();
+
+        if (cancelled) {
+          return;
+        }
+
+        setPlaying(true);
+
+        preloadTrack(currentSong);
+      } catch (error) {
+        console.error(
+          "Unable to automatically play:",
+          error
         );
 
-        if (
-          cancelled
-        ) {
-          return;
+        if (!cancelled) {
+          setPlaying(false);
         }
-
-        /*
-         * If this was a manual song change,
-         * automatically play.
-         */
-
-        if (
-          !resumeAfterTrackChangeRef.current
-        ) {
-          return;
-        }
-
-        resumeAfterTrackChangeRef.current =
-          false;
-
-        try {
-          await audio.play();
-
-          if (
-            cancelled
-          ) {
-            return;
-          }
-
-          setPlaying(true);
-
-          /*
-           * Metadata loads independently.
-           */
-
-          preloadTrack(
-            currentSong
-          );
-        } catch (error) {
-          console.error(
-            "Unable to automatically play:",
-            error
-          );
-
-          if (
-            !cancelled
-          ) {
-            setPlaying(
-              false
-            );
-          }
-        }
-      };
+      }
+    };
 
     updateSource();
 
     return () => {
       cancelled = true;
     };
-
-
   }, [
     currentSong?.file,
     preloadTrack,
   ]);
 
   /* =======================================================
-  PLAY / PAUSE
+     PLAY / PAUSE
   ======================================================= */
 
-  const togglePlay =
-    async () => {
-      const audio =
-        audioRef.current;
+  const togglePlay = async () => {
+    const audio =
+      audioRef.current;
 
+    if (
+      !audio ||
+      !currentSong?.file
+    ) {
+      return;
+    }
 
-      if (
-        !audio ||
-        !currentSong?.file
-      ) {
-        return;
-      }
+    try {
+      if (audio.paused) {
+        await audio.play();
 
-      try {
-        if (
-          audio.paused
-        ) {
-          await audio.play();
+        setPlaying(true);
 
-          setPlaying(true);
-
-          /*
-           * Metadata starts at the same time.
-           */
-
-          preloadTrack(
-            currentSong
-          );
-        } else {
-          audio.pause();
-
-          setPlaying(false);
-        }
-      } catch (error) {
-        console.error(
-          "Unable to play:",
-          error
-        );
+        preloadTrack(currentSong);
+      } else {
+        audio.pause();
 
         setPlaying(false);
       }
-    };
+    } catch (error) {
+      console.error(
+        "Unable to play:",
+        error
+      );
 
+      setPlaying(false);
+    }
+  };
 
   /* =======================================================
-  AUDIO EVENTS
+     AUDIO EVENTS
   ======================================================= */
 
-  const handleLoadedMetadata =
-    (event) => {
-      const value =
-        event.currentTarget
-          .duration;
+  const handleLoadedMetadata = (
+    event
+  ) => {
+    const value =
+      event.currentTarget.duration;
 
+    if (Number.isFinite(value)) {
+      setDuration(value);
+    }
+  };
 
-      if (
-        Number.isFinite(
-          value
-        )
-      ) {
-        setDuration(value);
-      }
-    };
+  const handleDurationChange = (
+    event
+  ) => {
+    const value =
+      event.currentTarget.duration;
 
+    if (Number.isFinite(value)) {
+      setDuration(value);
+    }
+  };
 
-  const handleDurationChange =
-    (event) => {
-      const value =
-        event.currentTarget
-          .duration;
-
-
-      if (
-        Number.isFinite(
-          value
-        )
-      ) {
-        setDuration(value);
-      }
-    };
-
-
-  const handleTimeUpdate =
-    (event) => {
-      setProgress(
-        event.currentTarget
-          .currentTime
-      );
-    };
+  const handleTimeUpdate = (
+    event
+  ) => {
+    setProgress(
+      event.currentTarget.currentTime
+    );
+  };
 
   /* =======================================================
-  WALLPAPER
+     WALLPAPER
   ======================================================= */
 
-  const handleWallpaperChange =
-    (event) => {
-      const file =
-        event.target.files?.[0];
+  const handleWallpaperChange = (
+    event
+  ) => {
+    const file =
+      event.target.files?.[0];
 
+    if (!file) {
+      return;
+    }
 
-      if (!file) {
-        return;
-      }
+    const imageUrl =
+      URL.createObjectURL(file);
 
-      const imageUrl =
-        URL.createObjectURL(
-          file
-        );
-
-      setWallpaper(
-        imageUrl
-      );
-    };
-
+    setWallpaper(imageUrl);
+  };
 
   /* =======================================================
-  WALLPAPER CLEANUP
+     WALLPAPER CLEANUP
   ======================================================= */
 
   useEffect(() => {
     return () => {
       if (
-        wallpaper?.startsWith(
-          "blob:"
-        )
+        wallpaper?.startsWith("blob:")
       ) {
         URL.revokeObjectURL(
           wallpaper
@@ -1532,25 +1067,25 @@ export default function Home() {
   }, [wallpaper]);
 
   /* =======================================================
-  LOADING
+     LOADING
   ======================================================= */
 
   if (loadingMusic) {
-    return (<main className="page loading-page"> <div className="loading-content"> <Code2 size={18} />
+    return (
+      <main className="page loading-page">
+        <div className="loading-content">
+          <Code2 size={18} />
 
-
-      <span>
-        loading playlist...
-      </span>
-    </div>
-    </main>
+          <span>
+            loading playlist...
+          </span>
+        </div>
+      </main>
     );
-
-
   }
 
   /* =======================================================
-  RENDER
+     RENDER
   ======================================================= */
 
   return (
@@ -1560,43 +1095,30 @@ export default function Home() {
         "--wallpaper": `url("${wallpaper}")`,
       }}
     >
-      {/* =================================================
-BACKGROUND
-================================================= */}
-
-
       <div className="bg-image" />
-
       <div className="bg-vignette" />
-
       <div className="grain" />
 
       {/* =================================================
-      WALLPAPER INPUT
-  ================================================= */}
+          WALLPAPER
+      ================================================= */}
 
       <input
         id="wallpaper-input"
         className="wallpaper-input"
         type="file"
         accept="image/*"
-        onChange={
-          handleWallpaperChange
-        }
+        onChange={handleWallpaperChange}
       />
 
       {/* =================================================
-      TOPBAR
-  ================================================= */}
+          TOPBAR
+      ================================================= */}
 
       <header className="topbar">
-
         <div className="brand">
           <Code2 size={15} />
-
-          <span>
-            DEV MODE
-          </span>
+          <span>DEV MODE</span>
         </div>
 
         <div className="status">
@@ -1609,20 +1131,16 @@ BACKGROUND
 
         <button
           type="button"
-          className={`office-top-button ${keyboardOn
-              ? "on"
-              : ""
-            }`}
+          className={`office-top-button ${
+            keyboardOn ? "on" : ""
+          }`}
           onClick={() =>
             setKeyboardOn(
-              (value) =>
-                !value
+              (value) => !value
             )
           }
           aria-label="Toggle office sounds"
-          aria-pressed={
-            keyboardOn
-          }
+          aria-pressed={keyboardOn}
         >
           <Keyboard size={15} />
 
@@ -1636,15 +1154,13 @@ BACKGROUND
               : "OFF"}
           </span>
         </button>
-
       </header>
 
       {/* =================================================
-      HERO
-  ================================================= */}
+          HERO
+      ================================================= */}
 
       <section className="hero">
-
         <div className="hero-grid">
 
           <div className="hero-copy">
@@ -1669,6 +1185,10 @@ BACKGROUND
               the terminal moving.
             </p>
 
+            {/* =================================================
+                CORRECT GLOBAL COUNTS
+            ================================================= */}
+
             <div className="hero-meta">
 
               <div className="meta-card">
@@ -1689,10 +1209,7 @@ BACKGROUND
                 <strong>
                   {playlists.length
                     .toString()
-                    .padStart(
-                      2,
-                      "0"
-                    )}
+                    .padStart(2, "0")}
                 </strong>
               </div>
 
@@ -1702,10 +1219,7 @@ BACKGROUND
                 </span>
 
                 <strong>
-                  {currentPlaylist
-                    ?.tracks
-                    ?.length ||
-                    0}
+                  {totalTracks}
                 </strong>
               </div>
 
@@ -1722,14 +1236,14 @@ BACKGROUND
           </div>
 
           {/* =================================================
-          WORKSPACE
-      ================================================= */}
+              WORKSPACE
+          ================================================= */}
 
           <div className="workspace">
 
             {/* =================================================
-            TERMINAL
-        ================================================= */}
+                TERMINAL
+            ================================================= */}
 
             <div className="terminal">
 
@@ -1754,32 +1268,29 @@ BACKGROUND
               <div className="terminal-body">
 
                 <div>
-                  <b>
-                    $
-                  </b>{" "}
-                  whoami
+                  <b>$</b>{" "}
+                  {terminalCommand.command}
                 </div>
 
                 <div className="output">
-                  software_developer
+                  {terminalCommand.output}
                 </div>
 
                 <div>
-                  <b>
-                    $
-                  </b>{" "}
-                  status
-                </div>
-
-                <div className="output">
-                  building something good...
-                </div>
-
-                <div>
-                  <b>
-                    $
-                  </b>{" "}
+                  <b>$</b>{" "}
                   ./playlist --start
+                </div>
+
+                <div className="output">
+                  {officeText}
+                </div>
+
+                <div>
+                  <b>$</b>{" "}
+                  {terminalCommands[
+                    (terminalIndex + 1) %
+                      terminalCommands.length
+                  ].command}
                 </div>
 
                 <div className="cursor-line">
@@ -1793,74 +1304,67 @@ BACKGROUND
                 </div>
 
               </div>
-
             </div>
 
             {/* =================================================
-            PLAYER
-        ================================================= */}
+                PLAYER
+            ================================================= */}
 
             <div className="player-card">
 
               {/* =================================================
-              COVER
-          ================================================= */}
+                  COVER
+              ================================================= */}
 
               <div
                 className="cover"
                 style={
-                  currentSong
-                    ?.picture
+                  currentSong?.picture
                     ? {
-                      backgroundImage:
-                        `url("${currentSong.picture}")`,
-                      backgroundSize:
-                        "cover",
-                      backgroundPosition:
-                        "center",
-                    }
+                        backgroundImage:
+                          `url("${currentSong.picture}")`,
+                        backgroundSize:
+                          "cover",
+                        backgroundPosition:
+                          "center",
+                      }
                     : undefined
                 }
               >
 
-                {!currentSong
-                  ?.picture && (
-                    <>
-                      <div className="label">
-                        DEV
-                        <br />
-                        MIX
-                      </div>
+                {!currentSong?.picture && (
+                  <>
+                    <div className="label">
+                      DEV
+                      <br />
+                      MIX
+                    </div>
 
-                      <div className="cover-code">
-                        {"{ }"}
-                      </div>
+                    <div className="cover-code">
+                      {"{ }"}
+                    </div>
 
-                      <div className="cover-title">
-                        DEEP
-                        <br />
-                        <span>
-                          WORK
-                        </span>
-                      </div>
+                    <div className="cover-title">
+                      DEEP
+                      <br />
+                      <span>
+                        WORK
+                      </span>
+                    </div>
 
-                      <div className="cover-small">
-                        BUILD · SHIP · REPEAT
-                      </div>
-                    </>
-                  )}
+                    <div className="cover-small">
+                      BUILD · SHIP · REPEAT
+                    </div>
+                  </>
+                )}
 
               </div>
 
               {/* =================================================
-              PLAYER
-          ================================================= */}
+                  PLAYER
+              ================================================= */}
 
               <div className="player">
-
-                {/* =================================================
-                NOW PLAYING
-            ================================================= */}
 
                 <div className="now">
 
@@ -1871,23 +1375,20 @@ BACKGROUND
                     </div>
 
                     <h2>
-                      {currentSong
-                        ?.title ||
+                      {currentSong?.title ||
                         "No song selected"}
                     </h2>
 
                     <p>
-                      {currentSong
-                        ?.artist ||
+                      {currentSong?.artist ||
                         "DEV MODE"}
                     </p>
 
-                    {currentSong
-                      ?.album && (
-                        <small className="now-album">
-                          {currentSong.album}
-                        </small>
-                      )}
+                    {currentSong?.album && (
+                      <small className="now-album">
+                        {currentSong.album}
+                      </small>
+                    )}
 
                   </div>
 
@@ -1899,89 +1400,72 @@ BACKGROUND
                 </div>
 
                 {/* =================================================
-                AUDIO
-            ================================================= */}
+                    AUDIO
+                ================================================= */}
 
-                {currentSong
-                  ?.file && (
-                    <audio
-                      ref={
-                        audioRef
-                      }
-                      src={
+                {currentSong?.file && (
+                  <audio
+                    ref={audioRef}
+                    src={currentSong.file}
+                    preload="metadata"
+
+                    onLoadedMetadata={
+                      handleLoadedMetadata
+                    }
+
+                    onDurationChange={
+                      handleDurationChange
+                    }
+
+                    onTimeUpdate={
+                      handleTimeUpdate
+                    }
+
+                    onPlay={() =>
+                      setPlaying(true)
+                    }
+
+                    onPause={() =>
+                      setPlaying(false)
+                    }
+
+                    onEnded={next}
+
+                    onError={() => {
+                      console.error(
+                        "Could not load audio:",
                         currentSong.file
-                      }
-                      preload="metadata"
+                      );
 
-                      onLoadedMetadata={
-                        handleLoadedMetadata
-                      }
+                      setPlaying(false);
 
-                      onDurationChange={
-                        handleDurationChange
-                      }
-
-                      onTimeUpdate={
-                        handleTimeUpdate
-                      }
-
-                      onPlay={() =>
-                        setPlaying(
-                          true
-                        )
-                      }
-
-                      onPause={() =>
-                        setPlaying(
-                          false
-                        )
-                      }
-
-                      onEnded={
-                        next
-                      }
-
-                      onError={() => {
-                        console.error(
-                          "Could not load audio:",
-                          currentSong.file
-                        );
-
-                        setPlaying(
-                          false
-                        );
-
-                        setMusicError(
-                          "This audio file could not be played."
-                        );
-                      }}
-                    />
-                  )}
+                      setMusicError(
+                        "This audio file could not be played."
+                      );
+                    }}
+                  />
+                )}
 
                 {/* =================================================
-                OFFICE AUDIO
-            ================================================= */}
+                    OFFICE AUDIO
+                ================================================= */}
 
                 <audio
-                  ref={
-                    keyboardRef
-                  }
+                  ref={keyboardRef}
                   src="/sounds/keyboard.mp3"
                   preload="auto"
                   loop
                 />
 
                 {/* =================================================
-                SEEK
-            ================================================= */}
+                    SEEK
+                ================================================= */}
 
                 <input
                   className="seek"
                   type="range"
                   min="0"
-                  max={
-                    duration || 0
-                  }
+                  max={duration || 0}
                   step="0.1"
                   value={Math.min(
                     progress,
@@ -1991,14 +1475,10 @@ BACKGROUND
                     !currentSong ||
                     !duration
                   }
-                  onChange={(
-                    event
-                  ) => {
+                  onChange={(event) => {
                     const value =
                       Number(
-                        event
-                          .target
-                          .value
+                        event.target.value
                       );
 
                     if (
@@ -2008,68 +1488,57 @@ BACKGROUND
                         value;
                     }
 
-                    setProgress(
-                      value
-                    );
+                    setProgress(value);
                   }}
                   style={{
-                    "--value": `${duration
+                    "--value": `${
+                      duration
                         ? Math.min(
-                          100,
-                          (progress /
-                            duration) *
-                          100
-                        )
+                            100,
+                            (progress /
+                              duration) *
+                              100
+                          )
                         : 0
-                      }%`,
+                    }%`,
                   }}
                   aria-label="Song progress"
                 />
 
                 {/* =================================================
-                TIMES
-            ================================================= */}
+                    TIMES
+                ================================================= */}
 
                 <div className="times">
 
                   <span>
-                    {formatTime(
-                      progress
-                    )}
+                    {formatTime(progress)}
                   </span>
 
                   <span>
-                    {formatTime(
-                      duration
-                    )}
+                    {formatTime(duration)}
                   </span>
 
                 </div>
 
                 {/* =================================================
-                CONTROLS
-            ================================================= */}
+                    CONTROLS
+                ================================================= */}
 
                 <div className="controls">
 
                   <button
                     type="button"
-                    onClick={
-                      previous
-                    }
+                    onClick={previous}
                     aria-label="Previous track"
                   >
-                    <SkipBack
-                      size={19}
-                    />
+                    <SkipBack size={19} />
                   </button>
 
                   <button
                     type="button"
                     className="play"
-                    onClick={
-                      togglePlay
-                    }
+                    onClick={togglePlay}
                     aria-label={
                       playing
                         ? "Pause"
@@ -2080,16 +1549,12 @@ BACKGROUND
                     {playing ? (
                       <Pause
                         size={21}
-                        strokeWidth={
-                          2
-                        }
+                        strokeWidth={2}
                       />
                     ) : (
                       <Play
                         size={21}
-                        strokeWidth={
-                          2
-                        }
+                        strokeWidth={2}
                       />
                     )}
 
@@ -2097,21 +1562,17 @@ BACKGROUND
 
                   <button
                     type="button"
-                    onClick={
-                      next
-                    }
+                    onClick={next}
                     aria-label="Next track"
                   >
-                    <SkipForward
-                      size={19}
-                    />
+                    <SkipForward size={19} />
                   </button>
 
                 </div>
 
                 {/* =================================================
-                BOTTOM CONTROLS
-            ================================================= */}
+                    BOTTOM CONTROLS
+                ================================================= */}
 
                 <div className="bottom-controls">
 
@@ -2119,28 +1580,21 @@ BACKGROUND
                     type="button"
                     className="playlist-button"
                     onClick={() =>
-                      setShowPlaylist(
-                        true
-                      )
+                      setShowPlaylist(true)
                     }
                     disabled={
                       !playlists.length
                     }
                   >
 
-                    <ListMusic
-                      size={16}
-                    />
+                    <ListMusic size={16} />
 
                     <span>
-                      {currentPlaylist
-                        ?.name ||
+                      {currentPlaylist?.name ||
                         "No playlists"}
                     </span>
 
-                    <ChevronDown
-                      size={15}
-                    />
+                    <ChevronDown size={15} />
 
                   </button>
 
@@ -2151,8 +1605,7 @@ BACKGROUND
                       className="volume-button"
                       onClick={() =>
                         setMuted(
-                          (value) =>
-                            !value
+                          (value) => !value
                         )
                       }
                       aria-label={
@@ -2163,13 +1616,9 @@ BACKGROUND
                     >
 
                       {muted ? (
-                        <VolumeX
-                          size={17}
-                        />
+                        <VolumeX size={17} />
                       ) : (
-                        <Volume2
-                          size={17}
-                        />
+                        <Volume2 size={17} />
                       )}
 
                     </button>
@@ -2186,21 +1635,16 @@ BACKGROUND
                           : volume
                       }
                       style={{
-                        "--volume": `${(muted
+                        "--volume": `${
+                          (muted
                             ? 0
-                            : volume) *
-                          100
-                          }%`,
+                            : volume) * 100
+                        }%`,
                       }}
-                      onChange={(
-                        event
-                      ) => {
-
+                      onChange={(event) => {
                         const newVolume =
                           Number(
-                            event
-                              .target
-                              .value
+                            event.target.value
                           );
 
                         setVolume(
@@ -2208,8 +1652,7 @@ BACKGROUND
                         );
 
                         setMuted(
-                          newVolume ===
-                          0
+                          newVolume === 0
                         );
 
                         if (
@@ -2226,34 +1669,30 @@ BACKGROUND
                     />
 
                   </div>
-
                 </div>
 
                 {/* =================================================
-                PLAYLIST SUMMARY
-            ================================================= */}
+                    PLAYLIST SUMMARY
+                ================================================= */}
 
                 <div className="playlist-summary">
 
                   <span>
-                    {currentPlaylist
-                      ?.tracks
-                      ?.length ||
-                      0}{" "}
+                    {currentPlaylist?.tracks
+                      ?.length || 0}{" "}
                     tracks
                   </span>
 
                   <span>
-                    {currentPlaylist
-                      ?.name ||
+                    {currentPlaylist?.name ||
                       "Playlist"}
                   </span>
 
                 </div>
 
                 {/* =================================================
-                WALLPAPER
-            ================================================= */}
+                    WALLPAPER
+                ================================================= */}
 
                 <label
                   htmlFor="wallpaper-input"
@@ -2271,32 +1710,24 @@ BACKGROUND
                 )}
 
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </section>
 
       {/* =================================================
-      PLAYLIST MODAL
-  ================================================= */}
+          PLAYLIST MODAL
+      ================================================= */}
 
       {showPlaylist && (
         <div
           className="playlist-overlay"
-          onMouseDown={(
-            event
-          ) => {
+          onMouseDown={(event) => {
             if (
               event.target ===
               event.currentTarget
             ) {
-              setShowPlaylist(
-                false
-              );
+              setShowPlaylist(false);
             }
           }}
         >
@@ -2326,9 +1757,7 @@ BACKGROUND
                 type="button"
                 className="modal-close"
                 onClick={() =>
-                  setShowPlaylist(
-                    false
-                  )
+                  setShowPlaylist(false)
                 }
                 aria-label="Close playlist"
               >
@@ -2337,6 +1766,10 @@ BACKGROUND
 
             </div>
 
+            {/* =================================================
+                PLAYLIST TABS
+            ================================================= */}
+
             <div className="playlist-tabs">
 
               {playlists.map(
@@ -2344,14 +1777,13 @@ BACKGROUND
 
                   <button
                     type="button"
-                    key={
-                      playlist.id
-                    }
-                    className={`playlist-tab ${playlist.id ===
-                        selectedPlaylistId
+                    key={playlist.id}
+                    className={`playlist-tab ${
+                      playlist.id ===
+                      selectedPlaylistId
                         ? "active"
                         : ""
-                      }`}
+                    }`}
                     onClick={() =>
                       changePlaylist(
                         playlist.id
@@ -2364,149 +1796,138 @@ BACKGROUND
                     </span>
 
                     <small>
-                      {playlist.tracks
-                        ?.length ||
+                      {playlist.tracks?.length ||
                         0}
                     </small>
 
                   </button>
-
                 )
               )}
 
             </div>
 
+            {/* =================================================
+                SONG HEADER
+            ================================================= */}
+
             <div className="modal-song-heading">
 
               <span>
-                {currentPlaylist
-                  ?.name ||
+                {currentPlaylist?.name ||
                   "Songs"}
               </span>
 
               <small>
-                {currentPlaylist
-                  ?.tracks
-                  ?.length ||
-                  0}{" "}
+                {currentPlaylist?.tracks
+                  ?.length || 0}{" "}
                 songs
               </small>
 
             </div>
 
+            {/* =================================================
+                SONG LIST
+            ================================================= */}
+
             <div className="modal-song-list">
 
-              {currentPlaylist
-                ?.tracks
-                ?.map(
-                  (
-                    item,
-                    index
-                  ) => (
+              {currentPlaylist?.tracks?.map(
+                (item, index) => (
 
-                    <button
-                      type="button"
-                      key={
-                        item.id ||
-                        item.file ||
-                        `${item.title}-${index}`
-                      }
-                      className={`modal-track ${item.id ===
-                          currentSong?.id
-                          ? "active"
-                          : ""
-                        }`}
-                      onClick={() => {
+                  <button
+                    type="button"
+                    key={
+                      item.id ||
+                      item.file ||
+                      `${item.title}-${index}`
+                    }
+                    className={`modal-track ${
+                      item.id ===
+                      currentSong?.id
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      changeSong(
+                        index,
+                        true
+                      );
 
-                        changeSong(
-                          index,
-                          true
-                        );
+                      setShowPlaylist(
+                        false
+                      );
+                    }}
+                  >
 
-                        setShowPlaylist(
-                          false
-                        );
+                    <span className="track-number">
+                      {String(index + 1).padStart(
+                        2,
+                        "0"
+                      )}
+                    </span>
 
-                      }}
-                    >
+                    <span className="track-details">
 
-                      <span className="track-number">
-                        {String(
-                          index + 1
-                        ).padStart(
-                          2,
-                          "0"
-                        )}
-                      </span>
+                      <strong>
+                        {item.title ||
+                          "Unknown title"}
+                      </strong>
 
-                      <span className="track-details">
+                      <small>
+                        {item.artist ||
+                          "Unknown artist"}
+                      </small>
 
-                        <strong>
-                          {item.title ||
-                            "Unknown title"}
-                        </strong>
+                      {item.album && (
+                        <em>
+                          {item.album}
+                        </em>
+                      )}
 
-                        <small>
-                          {item.artist ||
-                            "Unknown artist"}
-                        </small>
+                    </span>
 
-                        {item.album && (
-                          <em>
-                            {item.album}
-                          </em>
-                        )}
+                    <span className="track-action">
 
-                      </span>
+                      {item.id ===
+                        currentSong?.id &&
+                        playing ? (
 
-                      <span className="track-action">
+                        <span className="bars">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
 
-                        {item.id ===
-                          currentSong?.id &&
-                          playing ? (
+                      ) : (
 
-                          <span className="bars">
-                            <i />
-                            <i />
-                            <i />
-                          </span>
+                        <Play size={15} />
 
-                        ) : (
+                      )}
 
-                          <Play
-                            size={15}
-                          />
+                    </span>
 
-                        )}
+                  </button>
+                )
+              )}
 
-                      </span>
-
-                    </button>
-
-                  )
-                )}
-
-              {!currentPlaylist
-                ?.tracks
+              {!currentPlaylist?.tracks
                 ?.length && (
 
-                  <div className="empty-playlist">
-                    No songs found in this
-                    playlist.
-                  </div>
+                <div className="empty-playlist">
+                  No songs found in this
+                  playlist.
+                </div>
 
-                )}
+              )}
 
             </div>
-
           </div>
-
         </div>
       )}
 
       {/* =================================================
-      FOOTER
-  ================================================= */}
+          FOOTER
+      ================================================= */}
 
       <footer>
 
@@ -2521,7 +1942,6 @@ BACKGROUND
       </footer>
 
     </main>
-
-
   );
 }
+
