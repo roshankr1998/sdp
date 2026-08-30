@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  Activity,
   ChevronDown,
   Code2,
   Coffee,
@@ -63,6 +64,7 @@ export default function Home() {
 
   const audioRef = useRef(null);
   const keyboardRef = useRef(null);
+  const resumeAfterTrackChangeRef = useRef(false);
 
   /* =======================================================
      WALLPAPER
@@ -90,6 +92,11 @@ export default function Home() {
     useState("");
 
   const [current, setCurrent] = useState(0);
+
+  // The song being played is intentionally independent from the
+  // playlist currently being viewed in the playlist panel.
+  // This means changing playlist tabs never changes the audio source.
+  const [currentSong, setCurrentSong] = useState(null);
 
   /* =======================================================
      PLAYER
@@ -144,18 +151,13 @@ export default function Home() {
 
   /* =======================================================
      CURRENT SONG
+
+     IMPORTANT: this is NOT derived from currentPlaylist.
+     Playlist tabs are navigation only; the audio keeps playing
+     the exact same song until the user clicks another track.
   ======================================================= */
 
-  const song = useMemo(() => {
-    if (!currentPlaylist?.tracks?.length) {
-      return null;
-    }
-
-    return (
-      currentPlaylist.tracks[current] ||
-      currentPlaylist.tracks[0]
-    );
-  }, [currentPlaylist, current]);
+  const song = currentSong;
 
   /* =======================================================
      LOAD MUSIC
@@ -201,6 +203,9 @@ export default function Home() {
           );
 
           setCurrent(0);
+          setCurrentSong(
+            loadedPlaylists[0].tracks?.[0] || null
+          );
         }
       } catch (error) {
         console.error(
@@ -310,17 +315,17 @@ export default function Home() {
     const cycle = () => {
       const selected =
         chars[
-          Math.floor(
-            Math.random() * chars.length
-          )
+        Math.floor(
+          Math.random() * chars.length
+        )
         ];
 
       const line =
         officeLines[
-          Math.floor(
-            Math.random() *
-              officeLines.length
-          )
+        Math.floor(
+          Math.random() *
+          officeLines.length
+        )
         ];
 
       setActiveKeys([selected]);
@@ -344,65 +349,34 @@ export default function Home() {
   }, [keyboardOn]);
 
   /* =======================================================
-     CHANGE PLAYLIST
+     PLAYLIST OVERLAY
+
+     Opening/closing the playlist is a UI-only action.
+     It must NEVER pause, reset, or replace the current song.
   ======================================================= */
 
-  const changePlaylist = (
-    playlistId,
-    shouldPlay = false
-  ) => {
+  const openPlaylist = () => {
+    setShowPlaylist(true);
+  };
+
+  /* =======================================================
+     CHANGE PLAYLIST
+
+     This ONLY changes which playlist is displayed in the modal.
+     It deliberately does NOT touch audio, current song, progress,
+     duration, or playing state.
+  ======================================================= */
+
+  const changePlaylist = (playlistId) => {
     const playlist = playlists.find(
-      (item) =>
-        item.id === playlistId
+      (item) => item.id === playlistId
     );
 
     if (!playlist) {
       return;
     }
 
-    const audio = audioRef.current;
-
-    if (audio) {
-      audio.pause();
-
-      try {
-        audio.currentTime = 0;
-      } catch {
-        // Ignore.
-      }
-    }
-
     setSelectedPlaylistId(playlistId);
-    setCurrent(0);
-    setProgress(0);
-    setDuration(0);
-    setPlaying(false);
-
-    if (
-      shouldPlay &&
-      playlist.tracks?.length
-    ) {
-      setTimeout(() => {
-        const nextAudio =
-          audioRef.current;
-
-        if (!nextAudio) {
-          return;
-        }
-
-        nextAudio
-          .play()
-          .then(() => {
-            setPlaying(true);
-          })
-          .catch((error) => {
-            console.warn(
-              "Playlist playback failed:",
-              error
-            );
-          });
-      }, 100);
-    }
   };
 
   /* =======================================================
@@ -419,53 +393,31 @@ export default function Home() {
 
     if (
       index < 0 ||
-      index >=
-        currentPlaylist.tracks.length
+      index >= currentPlaylist.tracks.length
     ) {
       return;
     }
 
+    const nextSong = currentPlaylist.tracks[index];
     const audio = audioRef.current;
 
+    // Only an explicit song click is allowed to replace the audio source.
     if (audio) {
       audio.pause();
-
       try {
         audio.currentTime = 0;
       } catch {
-        // Ignore.
+        // Ignore browser restrictions.
       }
     }
 
     setCurrent(index);
+    setCurrentSong(nextSong);
     setProgress(0);
     setDuration(0);
     setPlaying(false);
 
-    if (autoPlay) {
-      setTimeout(() => {
-        const nextAudio =
-          audioRef.current;
-
-        if (!nextAudio) {
-          return;
-        }
-
-        nextAudio
-          .play()
-          .then(() => {
-            setPlaying(true);
-          })
-          .catch((error) => {
-            console.warn(
-              "Song playback failed:",
-              error
-            );
-
-            setPlaying(false);
-          });
-      }, 100);
-    }
+    resumeAfterTrackChangeRef.current = Boolean(autoPlay);
   };
 
   /* =======================================================
@@ -655,9 +607,8 @@ export default function Home() {
 
         <button
           type="button"
-          className={`office-top-button ${
-            keyboardOn ? "on" : ""
-          }`}
+          className={`office-top-button ${keyboardOn ? "on" : ""
+            }`}
           onClick={() =>
             setKeyboardOn(
               (value) => !value
@@ -683,476 +634,498 @@ export default function Home() {
       ================================================= */}
 
       <section className="hero">
-        <div className="eyebrow">
-          SOFTWARE DEVELOPER PLAYLIST · SESSION 01
-        </div>
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <div className="hero-kicker">
+              <span className="live-dot" />
+              SOFTWARE DEVELOPER · SESSION 01
+            </div>
 
-        <h1>
-          Code hard.
-          <br />
-          <em>Listen harder.</em>
-        </h1>
+            <h1>
+              Build in silence.
+              <br />
+              <em>Ship with sound.</em>
+            </h1>
 
-        <p className="intro">
-          A soundtrack for debugging at
-          2 AM, shipping at 5 PM, staring
-          at a terminal and convincing
-          yourself the bug is not in
-          production.
-        </p>
+            <p className="intro">
+              Your private workspace for late-night debugging,
+              focused coding and the soundtrack that keeps
+              the terminal moving.
+            </p>
 
-        {/* =================================================
+            <div className="hero-meta">
+              <div className="meta-card">
+                <span>SESSION</span>
+                <strong>DEEP WORK</strong>
+              </div>
+
+              <div className="meta-card">
+                <span>PLAYLISTS</span>
+                <strong>{playlists.length.toString().padStart(2, "0")}</strong>
+              </div>
+
+              <div className="meta-card">
+                <span>TRACKS</span>
+                <strong>{currentPlaylist?.tracks?.length || 0}</strong>
+              </div>
+            </div>
+
+            <div className="hero-note">
+              <Activity size={14} />
+              <span>focus mode / distraction level: low</span>
+            </div>
+          </div>
+
+          {/* =================================================
             WORKSPACE
         ================================================= */}
 
-        <div className="workspace">
-          {/* =================================================
+          <div className="workspace">
+            {/* =================================================
               TERMINAL
           ================================================= */}
 
-          <div className="terminal">
-            <div className="terminal-head">
-              <span className="dots">
-                <i />
-                <i />
-                <i />
-              </span>
-
-              <span>
-                ~/workspace
-              </span>
-
-              <span className="mac">
-                ●
-              </span>
-            </div>
-
-            <div className="terminal-body">
-              <div>
-                <b>$</b> whoami
-              </div>
-
-              <div className="output">
-                software_developer
-              </div>
-
-              <div>
-                <b>$</b> status
-              </div>
-
-              <div className="output">
-                building something good...
-              </div>
-
-              <div>
-                <b>$</b>{" "}
-                ./playlist --start
-              </div>
-
-              <div className="cursor-line">
-                <span className="prompt">
-                  ›
+            <div className="terminal">
+              <div className="terminal-head">
+                <span className="dots">
+                  <i />
+                  <i />
+                  <i />
                 </span>
 
-                <span className="blink">
-                  █
+                <span>
+                  ~/workspace
+                </span>
+
+                <span className="mac">
+                  ●
                 </span>
               </div>
-            </div>
-          </div>
 
-          {/* =================================================
+              <div className="terminal-body">
+                <div>
+                  <b>$</b> whoami
+                </div>
+
+                <div className="output">
+                  software_developer
+                </div>
+
+                <div>
+                  <b>$</b> status
+                </div>
+
+                <div className="output">
+                  building something good...
+                </div>
+
+                <div>
+                  <b>$</b>{" "}
+                  ./playlist --start
+                </div>
+
+                <div className="cursor-line">
+                  <span className="prompt">
+                    ›
+                  </span>
+
+                  <span className="blink">
+                    █
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* =================================================
               PLAYER CARD
           ================================================= */}
 
-          <div className="player-card">
-            {/* =================================================
+            <div className="player-card">
+              {/* =================================================
                 COVER
             ================================================= */}
 
-            <div className="cover">
-              <div className="label">
-                DEV
-                <br />
-                MIX
+              <div className="cover">
+                <div className="label">
+                  DEV
+                  <br />
+                  MIX
+                </div>
+
+                <div className="cover-code">
+                  {"{ }"}
+                </div>
+
+                <div className="cover-title">
+                  DEEP
+                  <br />
+                  <span>WORK</span>
+                </div>
+
+                <div className="cover-small">
+                  BUILD · SHIP · REPEAT
+                </div>
               </div>
 
-              <div className="cover-code">
-                {"{ }"}
-              </div>
-
-              <div className="cover-title">
-                DEEP
-                <br />
-                <span>WORK</span>
-              </div>
-
-              <div className="cover-small">
-                BUILD · SHIP · REPEAT
-              </div>
-            </div>
-
-            {/* =================================================
+              {/* =================================================
                 PLAYER
             ================================================= */}
 
-            <div className="player">
-              {/* =================================================
+              <div className="player">
+                {/* =================================================
                   NOW PLAYING
               ================================================= */}
 
-              <div className="now">
-                <div className="now-text">
-                  <div className="tiny">
-                    NOW PLAYING
+                <div className="now">
+                  <div className="now-text">
+                    <div className="tiny">
+                      NOW PLAYING
+                    </div>
+
+                    <h2>
+                      {song?.title ||
+                        "No song selected"}
+                    </h2>
+
+                    <p>
+                      {song?.artist ||
+                        "DEV MODE"}
+                    </p>
                   </div>
 
-                  <h2>
-                    {song?.title ||
-                      "No song selected"}
-                  </h2>
-
-                  <p>
-                    {song?.artist ||
-                      "DEV MODE"}
-                  </p>
+                  <Coffee
+                    size={19}
+                    strokeWidth={1.5}
+                  />
                 </div>
 
-                <Coffee
-                  size={19}
-                  strokeWidth={1.5}
-                />
-              </div>
-
-              {/* =================================================
+                {/* =================================================
                   MAIN AUDIO
               ================================================= */}
 
-              {song?.file ? (
-                <audio
-                  ref={audioRef}
-                  src={song.file}
-                  preload="metadata"
-                  onLoadedMetadata={(
-                    event
-                  ) => {
-                    const value =
-                      event.currentTarget
-                        .duration;
+                {song?.file ? (
+                  <audio
+                    ref={audioRef}
+                    src={song.file}
+                    preload="metadata"
+                    onLoadedMetadata={(
+                      event
+                    ) => {
+                      const value =
+                        event.currentTarget
+                          .duration;
 
-                    if (
-                      Number.isFinite(
-                        value
-                      )
-                    ) {
-                      setDuration(value);
+                      if (
+                        Number.isFinite(
+                          value
+                        )
+                      ) {
+                        setDuration(value);
+                      }
+                    }}
+                    onDurationChange={(
+                      event
+                    ) => {
+                      const value =
+                        event.currentTarget
+                          .duration;
+
+                      if (
+                        Number.isFinite(
+                          value
+                        )
+                      ) {
+                        setDuration(value);
+                      }
+                    }}
+                    onTimeUpdate={(
+                      event
+                    ) => {
+                      setProgress(
+                        event.currentTarget
+                          .currentTime
+                      );
+                    }}
+                    onPlay={() =>
+                      setPlaying(true)
                     }
-                  }}
-                  onDurationChange={(
-                    event
-                  ) => {
-                    const value =
-                      event.currentTarget
-                        .duration;
-
-                    if (
-                      Number.isFinite(
-                        value
-                      )
-                    ) {
-                      setDuration(value);
+                    onPause={() =>
+                      setPlaying(false)
                     }
-                  }}
-                  onTimeUpdate={(
-                    event
-                  ) => {
-                    setProgress(
-                      event.currentTarget
-                        .currentTime
-                    );
-                  }}
-                  onPlay={() =>
-                    setPlaying(true)
-                  }
-                  onPause={() =>
-                    setPlaying(false)
-                  }
-                  onEnded={next}
-                  onError={() => {
-                    console.error(
-                      "Could not load audio:",
-                      song.file
-                    );
+                    onEnded={next}
+                    onError={() => {
+                      console.error(
+                        "Could not load audio:",
+                        song.file
+                      );
 
-                    setPlaying(false);
-                    setMusicError(
-                      "This audio file could not be played."
-                    );
-                  }}
-                />
-              ) : null}
+                      setPlaying(false);
+                      setMusicError(
+                        "This audio file could not be played."
+                      );
+                    }}
+                  />
+                ) : null}
 
-              {/* =================================================
+                {/* =================================================
                   OFFICE AUDIO
               ================================================= */}
 
-              <audio
-                ref={keyboardRef}
-                src="/sounds/keyboard.mp3"
-                preload="auto"
-                loop
-              />
+                <audio
+                  ref={keyboardRef}
+                  src="/sounds/keyboard.mp3"
+                  preload="auto"
+                  loop
+                />
 
-              {/* =================================================
+                {/* =================================================
                   SEEK
               ================================================= */}
 
-              <input
-                className="seek"
-                type="range"
-                min="0"
-                max={duration || 0}
-                step="0.1"
-                value={Math.min(
-                  progress,
-                  duration || 0
-                )}
-                disabled={
-                  !song ||
-                  !duration
-                }
-                onChange={(event) => {
-                  const value =
-                    Number(
-                      event.target.value
-                    );
-
-                  if (
-                    audioRef.current
-                  ) {
-                    audioRef.current.currentTime =
-                      value;
+                <input
+                  className="seek"
+                  type="range"
+                  min="0"
+                  max={duration || 0}
+                  step="0.1"
+                  value={Math.min(
+                    progress,
+                    duration || 0
+                  )}
+                  disabled={
+                    !song ||
+                    !duration
                   }
+                  onChange={(event) => {
+                    const value =
+                      Number(
+                        event.target.value
+                      );
 
-                  setProgress(value);
-                }}
-                style={{
-                  "--value": `${
-                    duration
+                    if (
+                      audioRef.current
+                    ) {
+                      audioRef.current.currentTime =
+                        value;
+                    }
+
+                    setProgress(value);
+                  }}
+                  style={{
+                    "--value": `${duration
                       ? Math.min(
-                          100,
-                          (progress /
-                            duration) *
-                            100
-                        )
+                        100,
+                        (progress /
+                          duration) *
+                        100
+                      )
                       : 0
-                  }%`,
-                }}
-                aria-label="Song progress"
-              />
+                      }%`,
+                  }}
+                  aria-label="Song progress"
+                />
 
-              {/* =================================================
+                {/* =================================================
                   TIMES
               ================================================= */}
 
-              <div className="times">
-                <span>
-                  {formatTime(
-                    progress
-                  )}
-                </span>
+                <div className="times">
+                  <span>
+                    {formatTime(
+                      progress
+                    )}
+                  </span>
 
-                <span>
-                  {formatTime(
-                    duration
-                  )}
-                </span>
-              </div>
+                  <span>
+                    {formatTime(
+                      duration
+                    )}
+                  </span>
+                </div>
 
-              {/* =================================================
+                {/* =================================================
                   PLAYER CONTROLS
               ================================================= */}
 
-              <div className="controls">
-                <button
-                  type="button"
-                  onClick={previous}
-                  aria-label="Previous track"
-                >
-                  <SkipBack size={19} />
-                </button>
-
-                <button
-                  type="button"
-                  className="play"
-                  onClick={togglePlay}
-                  aria-label={
-                    playing
-                      ? "Pause"
-                      : "Play"
-                  }
-                >
-                  {playing ? (
-                    <Pause
-                      size={21}
-                      strokeWidth={2}
-                    />
-                  ) : (
-                    <Play
-                      size={21}
-                      strokeWidth={2}
-                    />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={next}
-                  aria-label="Next track"
-                >
-                  <SkipForward
-                    size={19}
-                  />
-                </button>
-              </div>
-
-              {/* =================================================
-                  BOTTOM CONTROLS
-              ================================================= */}
-
-              <div className="bottom-controls">
-                <button
-                  type="button"
-                  className="playlist-button"
-                  onClick={() =>
-                    setShowPlaylist(true)
-                  }
-                  disabled={
-                    !playlists.length
-                  }
-                >
-                  <ListMusic
-                    size={16}
-                  />
-
-                  <span>
-                    {currentPlaylist?.name ||
-                      "No playlists"}
-                  </span>
-
-                  <ChevronDown
-                    size={15}
-                  />
-                </button>
-
-                {/* =================================================
-                    VOLUME
-                ================================================= */}
-
-                <div className="volume">
+                <div className="controls">
                   <button
                     type="button"
-                    className="volume-button"
-                    onClick={() =>
-                      setMuted(
-                        (value) => !value
-                      )
-                    }
+                    onClick={previous}
+                    aria-label="Previous track"
+                  >
+                    <SkipBack size={19} />
+                  </button>
+
+                  <button
+                    type="button"
+                    className="play"
+                    onClick={togglePlay}
                     aria-label={
-                      muted
-                        ? "Unmute"
-                        : "Mute"
+                      playing
+                        ? "Pause"
+                        : "Play"
                     }
                   >
-                    {muted ? (
-                      <VolumeX size={17} />
+                    {playing ? (
+                      <Pause
+                        size={21}
+                        strokeWidth={2}
+                      />
                     ) : (
-                      <Volume2 size={17} />
+                      <Play
+                        size={21}
+                        strokeWidth={2}
+                      />
                     )}
                   </button>
 
-                  <input
-                    className="volume-slider"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={
-                      muted
-                        ? 0
-                        : volume
+                  <button
+                    type="button"
+                    onClick={next}
+                    aria-label="Next track"
+                  >
+                    <SkipForward
+                      size={19}
+                    />
+                  </button>
+                </div>
+
+                {/* =================================================
+                  BOTTOM CONTROLS
+              ================================================= */}
+
+                <div className="bottom-controls">
+                  <button
+                    type="button"
+                    className="playlist-button"
+                    onClick={openPlaylist}
+                    disabled={
+                      !playlists.length
                     }
-                    onChange={(event) => {
-                      const newVolume =
-                        Number(
-                          event.target
-                            .value
+                  >
+                    <ListMusic
+                      size={16}
+                    />
+
+                    <span>
+                      {currentPlaylist?.name ||
+                        "No playlists"}
+                    </span>
+
+                    <ChevronDown
+                      size={15}
+                    />
+                  </button>
+
+                  {/* =================================================
+                    VOLUME
+                ================================================= */}
+
+                  <div className="volume">
+                    <button
+                      type="button"
+                      className="volume-button"
+                      onClick={() =>
+                        setMuted(
+                          (value) => !value
+                        )
+                      }
+                      aria-label={
+                        muted
+                          ? "Unmute"
+                          : "Mute"
+                      }
+                    >
+                      {muted ? (
+                        <VolumeX size={17} />
+                      ) : (
+                        <Volume2 size={17} />
+                      )}
+                    </button>
+
+                    <input
+                      className="volume-slider"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={muted ? 0 : volume}
+                      style={{
+                        "--volume": `${(muted ? 0 : volume) * 100}%`
+                      }}
+                      onChange={(event) => {
+                        const newVolume =
+                          Number(
+                            event.target
+                              .value
+                          );
+
+                        setVolume(
+                          newVolume
                         );
 
-                      setVolume(
-                        newVolume
-                      );
+                        setMuted(
+                          newVolume === 0
+                        );
 
-                      setMuted(
-                        newVolume === 0
-                      );
+                        if (
+                          audioRef.current
+                        ) {
+                          audioRef.current.volume =
+                            newVolume;
 
-                      if (
-                        audioRef.current
-                      ) {
-                        audioRef.current.volume =
-                          newVolume;
-
-                        audioRef.current.muted =
-                          false;
-                      }
-                    }}
-                    aria-label="Music volume"
-                  />
+                          audioRef.current.muted =
+                            false;
+                        }
+                      }}
+                      aria-label="Music volume"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* =================================================
+                {/* =================================================
                   PLAYLIST SUMMARY
               ================================================= */}
 
-              <div className="playlist-summary">
-                <span>
-                  {currentPlaylist?.tracks
-                    ?.length || 0}{" "}
-                  tracks
-                </span>
+                <div className="playlist-summary">
+                  <span>
+                    {currentPlaylist?.tracks
+                      ?.length || 0}{" "}
+                    tracks
+                  </span>
 
-                <span>
-                  {currentPlaylist?.name ||
-                    "Playlist"}
-                </span>
-              </div>
+                  <span>
+                    {currentPlaylist?.name ||
+                      "Playlist"}
+                  </span>
+                </div>
 
-              {/* =================================================
+                {/* =================================================
                   WALLPAPER
               ================================================= */}
 
-              <label
-                htmlFor="wallpaper-input"
-                className="add-wallpaper"
-              >
-                <span>
-                  Choose Wallpaper
-                </span>
-              </label>
+                <label
+                  htmlFor="wallpaper-input"
+                  className="add-wallpaper"
+                >
+                  <span>
+                    Choose Wallpaper
+                  </span>
+                </label>
 
-              {/* =================================================
+                {/* =================================================
                   ERROR
               ================================================= */}
 
-              {musicError && (
-                <div className="music-error">
-                  {musicError}
-                </div>
-              )}
+                {musicError && (
+                  <div className="music-error">
+                    {musicError}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -1168,6 +1141,7 @@ export default function Home() {
               event.target ===
               event.currentTarget
             ) {
+              playlistWasPlayingRef.current = false;
               setShowPlaylist(false);
             }
           }}
@@ -1196,9 +1170,9 @@ export default function Home() {
               <button
                 type="button"
                 className="modal-close"
-                onClick={() =>
-                  setShowPlaylist(false)
-                }
+                onClick={() => {
+                  setShowPlaylist(false);
+                }}
                 aria-label="Close playlist"
               >
                 <X size={18} />
@@ -1215,16 +1189,14 @@ export default function Home() {
                   <button
                     type="button"
                     key={playlist.id}
-                    className={`playlist-tab ${
-                      playlist.id ===
+                    className={`playlist-tab ${playlist.id ===
                       selectedPlaylistId
-                        ? "active"
-                        : ""
-                    }`}
+                      ? "active"
+                      : ""
+                      }`}
                     onClick={() => {
                       changePlaylist(
-                        playlist.id,
-                        false
+                        playlist.id
                       );
                     }}
                   >
@@ -1274,11 +1246,10 @@ export default function Home() {
                       item.file ||
                       `${item.title}-${index}`
                     }
-                    className={`modal-track ${
-                      index === current
-                        ? "active"
-                        : ""
-                    }`}
+                    className={`modal-track ${item.file && song?.file === item.file
+                      ? "active"
+                      : ""
+                      }`}
                     onClick={() => {
                       changeSong(
                         index,
@@ -1318,9 +1289,9 @@ export default function Home() {
                     </span>
 
                     <span className="track-action">
-                      {index ===
-                        current &&
-                      playing ? (
+                      {item.file &&
+                        song?.file === item.file &&
+                        playing ? (
                         <span className="bars">
                           <i />
                           <i />
@@ -1336,11 +1307,11 @@ export default function Home() {
 
               {!currentPlaylist?.tracks
                 ?.length && (
-                <div className="empty-playlist">
-                  No songs found in this
-                  playlist.
-                </div>
-              )}
+                  <div className="empty-playlist">
+                    No songs found in this
+                    playlist.
+                  </div>
+                )}
             </div>
           </div>
         </div>
@@ -1362,4 +1333,3 @@ export default function Home() {
     </main>
   );
 }
-
